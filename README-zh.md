@@ -255,6 +255,9 @@ npx cross-env DEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true open-websearch
 | `USE_PROXY` | `false`                 | `true`, `false` | 启用HTTP代理                             |
 | `PROXY_URL` | `http://127.0.0.1:7890` | 任何有效URL | 代理服务器URL                             |
 | `FETCH_WEB_INSECURE_TLS` | `false` | `true`, `false` | 仅对 `fetchWebContent` 关闭 TLS 证书校验。只建议在目标站点证书链异常时临时使用 |
+| `BROWSER_BACKEND` | `chromium` | `chromium`, `external` | 静态选择本地 Playwright Chromium 或经过认证的外部浏览器 Worker |
+| `BROWSER_WORKER_URL` | 空 | HTTP(S) URL | macOS 浏览器 Worker 地址；`BROWSER_BACKEND=external` 时必填 |
+| `BROWSER_WORKER_TOKEN` | 空 | Bearer Token | macOS 浏览器 Worker 密钥；`BROWSER_BACKEND=external` 时必填 |
 | `MODE` | `both`                  | `both`, `http`, `stdio` | 服务器模式：同时支持HTTP+STDIO、仅HTTP或仅STDIO    |
 | `PORT` | `3000`                  | 1-65535 | 服务器端口                                |
 | `ALLOWED_SEARCH_ENGINES` | 空（全部可用） | 逗号分隔的引擎名称 | 限制可使用的搜索引擎，如默认搜索引擎不在范围，则默认第一个为默认搜索引擎 |

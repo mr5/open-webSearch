@@ -14,6 +14,10 @@ export interface AppConfig {
     useProxy: boolean;
     fakeIpCidrs: string[];
     fetchWebAllowInsecureTls: boolean;
+    // Browser implementation used by rendered-page paths.
+    browserBackend: 'chromium' | 'external';
+    browserWorkerUrl?: string;
+    browserWorkerToken?: string;
     // Playwright configuration
     playwrightPackage: 'auto' | 'playwright' | 'playwright-core';
     playwrightModulePath?: string;
@@ -50,6 +54,9 @@ export const config: AppConfig = {
         process.env.FAKE_IP_CIDRS.split(',').map(cidr => cidr.trim()).filter(Boolean) :
         [],
     fetchWebAllowInsecureTls: process.env.FETCH_WEB_INSECURE_TLS === 'true',
+    browserBackend: (process.env.BROWSER_BACKEND as AppConfig['browserBackend']) || 'chromium',
+    browserWorkerUrl: readOptionalEnv('BROWSER_WORKER_URL'),
+    browserWorkerToken: readOptionalEnv('BROWSER_WORKER_TOKEN'),
     playwrightPackage: (process.env.PLAYWRIGHT_PACKAGE as AppConfig['playwrightPackage']) || 'auto',
     playwrightModulePath: readOptionalEnv('PLAYWRIGHT_MODULE_PATH'),
     playwrightExecutablePath: readOptionalEnv('PLAYWRIGHT_EXECUTABLE_PATH'),
@@ -69,6 +76,7 @@ export const config: AppConfig = {
 const validSearchEngines = ['bing', 'duckduckgo', 'exa', 'brave', 'baidu', 'csdn', 'linuxdo', 'juejin', 'startpage', 'sogou'];
 const validSearchModes = ['request', 'auto', 'playwright'];
 const validPlaywrightPackages = ['auto', 'playwright', 'playwright-core'];
+const validBrowserBackends = ['chromium', 'external'];
 const quietStartupLogs = process.env.OPEN_WEBSEARCH_QUIET_STARTUP === 'true';
 
 // Validate default search engine
@@ -85,6 +93,30 @@ if (!validSearchModes.includes(config.searchMode)) {
 if (!validPlaywrightPackages.includes(config.playwrightPackage)) {
     console.warn(`Invalid PLAYWRIGHT_PACKAGE: "${config.playwrightPackage}", falling back to "auto"`);
     config.playwrightPackage = 'auto';
+}
+
+if (!validBrowserBackends.includes(config.browserBackend)) {
+    console.warn(`Invalid BROWSER_BACKEND: "${config.browserBackend}", falling back to "chromium"`);
+    config.browserBackend = 'chromium';
+}
+
+if (config.browserBackend === 'external') {
+    if (!config.browserWorkerUrl) {
+        console.warn('BROWSER_BACKEND=external requires BROWSER_WORKER_URL; browser operations will be unavailable');
+    } else {
+        try {
+            const workerUrl = new URL(config.browserWorkerUrl);
+            if (!['http:', 'https:'].includes(workerUrl.protocol)) {
+                throw new Error(`unsupported protocol ${workerUrl.protocol}`);
+            }
+        } catch (error) {
+            console.warn(`Invalid BROWSER_WORKER_URL: ${error instanceof Error ? error.message : String(error)}`);
+            config.browserWorkerUrl = undefined;
+        }
+    }
+    if (!config.browserWorkerToken) {
+        console.warn('BROWSER_BACKEND=external requires BROWSER_WORKER_TOKEN; browser operations will be unavailable');
+    }
 }
 
 if (config.fakeIpCidrs.length > 0) {
@@ -168,6 +200,10 @@ if (!quietStartupLogs) {
         console.error('🔐 fetchWebContent TLS verification is enabled');
     }
 
+    console.error(`🧭 Browser backend: ${config.browserBackend}`);
+    if (config.browserBackend === 'external') {
+        console.error(`🧭 External browser worker: ${config.browserWorkerUrl || '(not configured)'}`);
+    }
     console.error(`🧭 Playwright client source: ${config.playwrightPackage}`);
     if (config.playwrightModulePath) {
         console.error(`🧭 Playwright module path override: ${config.playwrightModulePath}`);

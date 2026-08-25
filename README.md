@@ -167,6 +167,9 @@ npx cross-env DEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true open-websearch
 | `PROXY_URL` | `http://127.0.0.1:7890` | Any valid URL | Proxy server URL |
 | `FAKE_IP_CIDRS` | empty | Comma-separated CIDR list | Treat DNS answers in these CIDRs as synthetic fake-IP results and do not block them as private-network DNS answers. Literal private/local targets and other private-network DNS answers remain blocked |
 | `FETCH_WEB_INSECURE_TLS` | `false` | `true`, `false` | Disable TLS certificate verification for `fetchWebContent` only. Use only when a target site has a broken certificate chain |
+| `BROWSER_BACKEND` | `chromium` | `chromium`, `external` | Statically select local Playwright Chromium or the authenticated external browser worker |
+| `BROWSER_WORKER_URL` | empty | HTTP(S) URL | External macOS browser worker base URL; required when `BROWSER_BACKEND=external` |
+| `BROWSER_WORKER_TOKEN` | empty | Secret bearer token | External browser worker authentication token; required when `BROWSER_BACKEND=external` |
 | `MODE` | `both`                  | `both`, `http`, `stdio` | Server mode: both HTTP+STDIO, HTTP only, or STDIO only |
 | `PORT` | `3000`                  | 1-65535 | Server port |
 | `ALLOWED_SEARCH_ENGINES` | empty (all available) | Comma-separated engine names | Limit which search engines can be used; if the default engine is not in this list, the first allowed engine becomes the default |
@@ -261,6 +264,8 @@ Mode behavior:
 - `playwright`: forces Playwright and errors if the configured Playwright client or browser target is unavailable
 
 Notes:
+- `BROWSER_BACKEND=external` sends every rendered-page and browser Bing operation to the worker; it never dynamically falls back to local Chromium
+- The worker selects nodriver/Chrome or Camoufox on the Mac, so switching those browsers does not require rebuilding Open WebSearch
 - `PLAYWRIGHT_MODULE_PATH` takes precedence over `PLAYWRIGHT_PACKAGE`
 - `PLAYWRIGHT_WS_ENDPOINT` takes precedence over `PLAYWRIGHT_CDP_ENDPOINT`
 - Remote endpoints ignore `PLAYWRIGHT_EXECUTABLE_PATH` and local proxy launch flags
