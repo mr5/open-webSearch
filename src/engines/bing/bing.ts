@@ -5,6 +5,7 @@ import { SearchResult } from '../../types.js';
 import { parseBingSearchResults } from './parser.js';
 import { acquirePooledPlaywrightPage, getPlaywrightModuleSource, loadPlaywrightClient, openPlaywrightBrowser } from '../../utils/playwrightClient.js';
 import { buildAxiosRequestOptions as buildSharedAxiosRequestOptions } from '../../utils/httpRequest.js';
+import { checkBrowserWorker, searchBingWithBrowserWorker } from '../../utils/browserWorkerClient.js';
 
 const BING_BASE_URL = 'https://cn.bing.com/search';
 const BING_HOME_URL = 'https://www.bing.com/?mkt=zh-CN';
@@ -124,8 +125,8 @@ function buildBingAxiosRequestOptions(): any {
     });
 }
 
-let playwrightAvailabilityPromise: Promise<boolean> | null = null;
-let hasVerifiedPlaywrightAvailability = false;
+let browserAvailabilityPromise: Promise<boolean> | null = null;
+let hasVerifiedBrowserAvailability = false;
 let hasLoggedHiddenHeadedMode = false;
 
 function shouldUseHiddenHeadedBingBrowser(): boolean {
@@ -627,13 +628,23 @@ async function goToNextResultsPage(page: any): Promise<boolean> {
     return false;
 }
 
-async function isPlaywrightAvailable(): Promise<boolean> {
-    if (hasVerifiedPlaywrightAvailability) {
+async function isBrowserAvailable(): Promise<boolean> {
+    if (hasVerifiedBrowserAvailability) {
         return true;
     }
 
-    if (!playwrightAvailabilityPromise) {
-        playwrightAvailabilityPromise = (async () => {
+    if (!browserAvailabilityPromise) {
+        browserAvailabilityPromise = (async () => {
+            if (config.browserBackend === 'external') {
+                try {
+                    await checkBrowserWorker();
+                    hasVerifiedBrowserAvailability = true;
+                    return true;
+                } catch (error) {
+                    console.warn('External browser worker is unavailable, auto fallback will retry on the next blocked request:', error);
+                    return false;
+                }
+            }
             const playwright = await loadPlaywrightClient({ silent: true });
             if (!playwright) {
                 return false;
@@ -647,7 +658,7 @@ async function isPlaywrightAvailable(): Promise<boolean> {
                     { hideWindow: shouldUseHiddenHeadedBingBrowser() }
                 );
                 await session.release();
-                hasVerifiedPlaywrightAvailability = true;
+                hasVerifiedBrowserAvailability = true;
                 return true;
             } catch (error) {
                 const playwrightModuleSource = getPlaywrightModuleSource();
@@ -655,13 +666,13 @@ async function isPlaywrightAvailable(): Promise<boolean> {
                 return false;
             }
         })().finally(() => {
-            if (!hasVerifiedPlaywrightAvailability) {
-                playwrightAvailabilityPromise = null;
+            if (!hasVerifiedBrowserAvailability) {
+                browserAvailabilityPromise = null;
             }
         });
     }
 
-    return playwrightAvailabilityPromise;
+    return browserAvailabilityPromise;
 }
 
 async function searchBingWithHttp(query: string, limit: number): Promise<SearchResult[]> {
@@ -694,7 +705,38 @@ async function searchBingWithHttp(query: string, limit: number): Promise<SearchR
     return allResults.slice(0, limit);
 }
 
-async function searchBingWithPlaywright(query: string, limit: number): Promise<SearchResult[]> {
+async function searchBingWithBrowser(query: string, limit: number): Promise<SearchResult[]> {
+    if (config.browserBackend === 'external') {
+        const pages = await searchBingWithBrowserWorker(query, limit);
+        const allResults: SearchResult[] = [];
+        const seenUrls = new Set<string>();
+
+        for (const page of pages) {
+            const pageState = analyzeBlockedPage(page.html);
+            if (pageState.blocked) {
+                throw new Error(`Bing returned a verification or anti-bot page in external browser mode (title: ${pageState.title || 'unknown'}, keywords: ${pageState.detectedKeywords.join(', ') || 'none'})`);
+            }
+            const pageResults = parseBingSearchResults(page.html, limit - allResults.length)
+                .filter((result) => {
+                    if (seenUrls.has(result.url)) {
+                        return false;
+                    }
+                    seenUrls.add(result.url);
+                    return true;
+                });
+            allResults.push(...pageResults);
+            if (allResults.length >= limit) {
+                break;
+            }
+        }
+
+        const finalResults = allResults.slice(0, limit);
+        if (finalResults.length === 0 && hasSiteOperator(query)) {
+            throw new Error('Bing external browser mode returned no results for a site:-restricted query. Retry without the site: prefix.');
+        }
+        return finalResults;
+    }
+
     const playwright = await loadPlaywrightClient();
     if (!playwright) {
         throw new Error('Playwright client is not available. Install `playwright`/`playwright-core` manually or configure PLAYWRIGHT_MODULE_PATH.');
@@ -790,18 +832,18 @@ export async function searchBing(
     }
 
     if (effectiveSearchMode === 'playwright') {
-        return searchBingWithPlaywright(query, limit);
+        return searchBingWithBrowser(query, limit);
     }
 
     try {
         return await searchBingWithHttp(query, limit);
     } catch (requestError) {
-        const canUsePlaywright = await isPlaywrightAvailable();
+        const canUsePlaywright = await isBrowserAvailable();
         if (!canUsePlaywright) {
             throw requestError;
         }
 
         console.warn('Request-based Bing search failed, falling back to Playwright mode:', requestError);
-        return searchBingWithPlaywright(query, limit);
+        return searchBingWithBrowser(query, limit);
     }
 }

@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import { config, getProxyUrl } from '../config.js';
 import { openPlaywrightBrowser, loadPlaywrightClient } from './playwrightClient.js';
+import { renderPageWithBrowserWorker } from './browserWorkerClient.js';
 import { assertPublicHttpUrl, assertPublicHttpUrlResolved } from './urlSafety.js';
 
 const COOKIE_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -36,6 +37,8 @@ const cookieCache = new Map<string, CookieCacheEntry>();
 function buildCookieCacheKey(url: URL): string {
     return [
         url.origin,
+        config.browserBackend,
+        config.browserWorkerUrl || '-',
         getProxyUrl() || '-',
         config.playwrightPackage,
         config.playwrightModulePath || '-',
@@ -223,6 +226,19 @@ export async function getBrowserCookieHeader(urlInput: string, forceRefresh: boo
         return cached.cookieHeader;
     }
 
+    if (config.browserBackend === 'external') {
+        const result = await renderPageWithBrowserWorker(url.toString());
+        await assertPublicHttpUrlResolved(result.finalUrl, 'Browser worker final URL');
+        if (!result.cookieHeader) {
+            return undefined;
+        }
+        cookieCache.set(cacheKey, {
+            cookieHeader: result.cookieHeader,
+            expiresAt: Date.now() + COOKIE_CACHE_TTL_MS
+        });
+        return result.cookieHeader;
+    }
+
     const playwright = await loadPlaywrightClient({ silent: true });
     if (!playwright) {
         return undefined;
@@ -264,6 +280,16 @@ export async function getBrowserCookieHeader(urlInput: string, forceRefresh: boo
 
 export async function fetchPageHtmlWithBrowser(urlInput: string): Promise<{ html: string; finalUrl: string; title: string }> {
     await assertPublicHttpUrlResolved(urlInput, 'Browser fetch URL');
+
+    if (config.browserBackend === 'external') {
+        const result = await renderPageWithBrowserWorker(urlInput);
+        await assertPublicHttpUrlResolved(result.finalUrl, 'Browser worker final URL');
+        return {
+            html: result.html,
+            finalUrl: result.finalUrl,
+            title: result.title
+        };
+    }
 
     const playwright = await loadPlaywrightClient({ silent: true });
     if (!playwright) {
