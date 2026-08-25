@@ -53,6 +53,7 @@ const MIN_MAX_CHARS = 1000;
 const MAX_MAX_CHARS = 200000;
 const MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024;
 const MIN_METADATA_FALLBACK_CHARS = 200;
+const CHARSET_SNIFF_BYTES = 16 * 1024;
 
 type HtmlExtractionResult = {
     title: string;
@@ -114,6 +115,99 @@ function logReadabilityFallback(message: string, error?: unknown): void {
 function isMarkdownContentType(contentType: string): boolean {
     const ct = contentType.toLowerCase();
     return ct.includes('text/markdown') || ct.includes('application/markdown') || ct.includes('text/x-markdown');
+}
+
+function responseDataToBytes(data: unknown): Uint8Array | undefined {
+    if (Buffer.isBuffer(data)) {
+        return data;
+    }
+
+    if (data instanceof ArrayBuffer) {
+        return new Uint8Array(data);
+    }
+
+    if (ArrayBuffer.isView(data)) {
+        return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    }
+
+    return undefined;
+}
+
+function charsetFromBom(bytes: Uint8Array): string | undefined {
+    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+        return 'utf-8';
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+        return 'utf-16le';
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+        return 'utf-16be';
+    }
+    return undefined;
+}
+
+function extractCharset(value: string): string | undefined {
+    const match = value.match(/charset\s*=\s*["']?\s*([^\s;"'/>]+)/i);
+    return match?.[1]?.trim();
+}
+
+function normalizeCharset(charset: string): string {
+    const normalized = charset.trim().toLowerCase().replace(/_/g, '-');
+    const aliases: Record<string, string> = {
+        cp932: 'shift_jis',
+        'ms-kanji': 'shift_jis',
+        ms932: 'shift_jis',
+        shiftjis: 'shift_jis',
+        'shift-jis': 'shift_jis',
+        sjis: 'shift_jis',
+        'windows-31j': 'shift_jis',
+        'x-sjis': 'shift_jis',
+        utf8: 'utf-8'
+    };
+    return aliases[normalized] || normalized;
+}
+
+function detectResponseCharset(bytes: Uint8Array, contentType: string): string {
+    const bomCharset = charsetFromBom(bytes);
+    if (bomCharset) {
+        return bomCharset;
+    }
+
+    const headerCharset = extractCharset(contentType);
+    if (headerCharset) {
+        return normalizeCharset(headerCharset);
+    }
+
+    // HTML encoding declarations are ASCII-compatible even in legacy encodings
+    // such as Shift_JIS, so a latin1 scan preserves the markup needed here.
+    const prefix = Buffer.from(bytes.subarray(0, CHARSET_SNIFF_BYTES)).toString('latin1');
+    const metaTag = prefix.match(/<meta\b[^>]*>/gi)?.find((tag) => /charset\s*=/i.test(tag));
+    const declaredCharset = metaTag ? extractCharset(metaTag) : undefined;
+    if (declaredCharset) {
+        return normalizeCharset(declaredCharset);
+    }
+
+    const xmlDeclaration = prefix.match(/<\?xml\b[^>]*\?>/i)?.[0];
+    const xmlEncoding = xmlDeclaration?.match(/encoding\s*=\s*["']\s*([^"']+)/i)?.[1];
+    return normalizeCharset(xmlEncoding || 'utf-8');
+}
+
+function decodeResponseData(data: unknown, contentType: string): string {
+    if (typeof data === 'string') {
+        return data;
+    }
+
+    const bytes = responseDataToBytes(data);
+    if (!bytes) {
+        return JSON.stringify(data, null, 2);
+    }
+
+    const charset = detectResponseCharset(bytes, contentType);
+    try {
+        return new TextDecoder(charset).decode(bytes);
+    } catch {
+        return new TextDecoder('utf-8').decode(bytes);
+    }
 }
 
 let browserHtmlFetcher: typeof fetchPageHtmlWithBrowser = fetchPageHtmlWithBrowser;
@@ -237,7 +331,7 @@ function buildRequestOptions(cookieHeader?: string): any {
         maxBodyLength: MAX_DOWNLOAD_BYTES,
         maxContentLength: MAX_DOWNLOAD_BYTES,
         maxRedirects: 5,
-        responseType: 'text',
+        responseType: 'arraybuffer',
         timeout: DEFAULT_TIMEOUT_MS,
     });
 
@@ -607,9 +701,7 @@ export async function fetchWebContent(
         contentType = String(response.headers['content-type'] || '').toLowerCase();
         finalUrl = response.request?.res?.responseUrl || parsedUrl.toString();
         assertPublicHttpUrl(finalUrl, 'Final URL');
-        raw = typeof response.data === 'string'
-            ? response.data
-            : JSON.stringify(response.data, null, 2);
+        raw = decodeResponseData(response.data, contentType);
 
         const contentLength = Number(response.headers['content-length']);
         if (Number.isFinite(contentLength) && contentLength > MAX_DOWNLOAD_BYTES) {
