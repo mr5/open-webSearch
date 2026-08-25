@@ -93,6 +93,17 @@ function installAxiosMock(): void {
             });
         }
 
+        if (url.endsWith('/shift-jis')) {
+            return makeResponse(config, {
+                headers: { 'content-type': 'text/html' },
+                data: Buffer.from(
+                    'PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0iU2hpZnRfSklTIj48dGl0bGU+ib+KaZTkinI8L3RpdGxlPjwvaGVhZD48Ym9keT48bWFpbj48aDE+ib+KaZTkinI8L2gxPjxwPo3FiMCJv4ppgs2T8ZVTjk+PXI5PlpyJfoLFgreBQo3djMmCoILogsyPpJVpgvCU5IpygsWCq4LcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQpP6lnuM6oLMj6SVaY/ulfGC8JCzgrWCrZVcjqaCtYLcgreBQjwvcD48L21haW4+PC9ib2R5PjwvaHRtbD4=',
+                    'base64'
+                ),
+                finalUrl: url
+            });
+        }
+
         if (url.endsWith('/long.md')) {
             return makeResponse(config, {
                 headers: { 'content-type': 'text/markdown; charset=utf-8' },
@@ -207,8 +218,21 @@ async function main(): Promise<void> {
                 assert(result.content.includes('Skill body content'), 'html content should be extracted');
                 const configs = requestConfigs.get('https://example.com/page') || [];
                 const firstConfig = configs[0]?.options;
+                const getConfig = configs.find((entry) => entry.method === 'GET')?.options;
                 assert(firstConfig?.proxy === false, 'axios env proxy resolution should be disabled');
                 assert(firstConfig?.httpsAgent, 'httpsAgent should always be configured for direct https requests');
+                assert(getConfig?.responseType === 'arraybuffer', 'GET should preserve response bytes for charset decoding');
+            }
+        },
+        {
+            name: 'should decode Shift_JIS html declared by meta charset',
+            run: async () => {
+                const result = await fetchWebContent('https://example.com/shift-jis', 5000);
+                assert(result.title === '価格比較', 'Shift_JIS title should decode correctly');
+                assert(result.content.includes('最安価格'), 'Shift_JIS body should decode correctly');
+                assert(result.content.includes('日本語の商品情報'), 'decoded body should preserve Japanese text');
+                assert(!result.content.includes('�'), 'decoded body should not contain replacement characters');
+                assert(result.retrievalMethod === 'request', 'legacy encoding alone should not require browser fallback');
             }
         },
         {
