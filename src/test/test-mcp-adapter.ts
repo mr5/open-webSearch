@@ -56,6 +56,9 @@ function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig {
         useProxy: false,
         fakeIpCidrs: [],
         fetchWebAllowInsecureTls: false,
+        browserBackend: 'chromium',
+        browserWorkerUrl: undefined,
+        browserWorkerToken: undefined,
         playwrightPackage: 'auto',
         playwrightModulePath: undefined,
         playwrightExecutablePath: undefined,
@@ -67,7 +70,7 @@ function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig {
         corsOrigin: '*',
         enableHttpServer: true,
         ...overrides
-    };
+    } as AppConfig;
 }
 
 function parseJsonBlock(text: string): unknown {

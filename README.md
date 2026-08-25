@@ -177,6 +177,9 @@ npx cross-env DEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true open-websearch
 | `PROXY_URL` | `http://127.0.0.1:7890` | Any valid URL | Proxy server URL |
 | `FAKE_IP_CIDRS` | empty | Comma-separated CIDR list | Treat DNS answers in these CIDRs as synthetic fake-IP results and do not block them as private-network DNS answers. Literal private/local targets and other private-network DNS answers remain blocked |
 | `FETCH_WEB_INSECURE_TLS` | `false` | `true`, `false` | Disable TLS verification only for the request leg of `fetchWebContent`; it does not affect Playwright browser navigation. Use only for broken certificate chains |
+| `BROWSER_BACKEND` | `chromium` | `chromium`, `external` | Statically select local Playwright Chromium or the authenticated external browser worker |
+| `BROWSER_WORKER_URL` | empty | HTTP(S) URL | External macOS browser worker base URL; required when `BROWSER_BACKEND=external` |
+| `BROWSER_WORKER_TOKEN` | empty | Secret bearer token | External browser worker authentication token; required when `BROWSER_BACKEND=external` |
 | `MODE` | `both`                  | `both`, `http`, `stdio` | Server mode: both HTTP+STDIO, HTTP only, or STDIO only |
 | `PORT` | `3000`                  | 1-65535 | Server port |
 | `ALLOWED_SEARCH_ENGINES` | empty (all available) | Comma-separated engine names | Limit which search engines can be used; if the default engine is not in this list, the first allowed engine becomes the default |

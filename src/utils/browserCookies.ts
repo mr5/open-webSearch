@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import { config, getProxyUrl } from '../config.js';
 import { openPlaywrightBrowser, loadPlaywrightClient, acquirePooledPlaywrightPage } from './playwrightClient.js';
+import { renderPageWithBrowserWorker } from './browserWorkerClient.js';
 import { assertPublicHttpUrl, assertPublicHttpUrlResolved } from './urlSafety.js';
 
 const COOKIE_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -303,6 +304,10 @@ export async function getBrowserCookieHeader(urlInput: string, forceRefresh: boo
 
 export async function fetchPageHtmlWithBrowser(urlInput: string): Promise<{ html: string; finalUrl: string; title: string; dialogTexts?: string[] }> {
     await assertPublicHttpUrlResolved(urlInput, 'Browser fetch URL');
+
+    if (config.browserBackend === 'external') {
+        return renderPageWithBrowserWorker(urlInput);
+    }
 
     const playwright = await loadPlaywrightClient({ silent: true });
     if (!playwright) {

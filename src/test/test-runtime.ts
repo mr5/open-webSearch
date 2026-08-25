@@ -17,6 +17,7 @@ function createTestConfig(): AppConfig {
         useProxy: false,
         fakeIpCidrs: [],
         fetchWebAllowInsecureTls: false,
+        browserBackend: 'chromium',
         playwrightPackage: 'auto',
         playwrightHeadless: true,
         playwrightNavigationTimeoutMs: 20000,

@@ -5,6 +5,7 @@ import { SearchResult } from '../../types.js';
 import { parseBingSearchResults } from './parser.js';
 import { acquirePooledPlaywrightPage, getPlaywrightModuleSource, loadPlaywrightClient, openPlaywrightBrowser, retryOnBrowserCrash } from '../../utils/playwrightClient.js';
 import { buildAxiosRequestOptions as buildSharedAxiosRequestOptions } from '../../utils/httpRequest.js';
+import { checkBrowserWorker, searchBingWithBrowserWorker } from '../../utils/browserWorkerClient.js';
 
 const BING_BASE_URL = 'https://cn.bing.com/search';
 const BING_HOME_URL = 'https://www.bing.com/?mkt=zh-CN';
@@ -568,6 +569,17 @@ async function isPlaywrightAvailable(): Promise<boolean> {
 
     if (!playwrightAvailabilityPromise) {
         playwrightAvailabilityPromise = (async () => {
+            if (config.browserBackend === 'external') {
+                try {
+                    await checkBrowserWorker();
+                    hasVerifiedPlaywrightAvailability = true;
+                    return true;
+                } catch (error) {
+                    console.warn('External browser worker is unavailable, auto fallback will retry on the next blocked request:', error);
+                    return false;
+                }
+            }
+
             const playwright = await loadPlaywrightClient({ silent: true });
             if (!playwright) {
                 return false;
@@ -624,6 +636,37 @@ async function searchBingWithHttp(query: string, limit: number): Promise<SearchR
 }
 
 async function searchBingWithPlaywright(query: string, limit: number): Promise<SearchResult[]> {
+    if (config.browserBackend === 'external') {
+        const pages = await searchBingWithBrowserWorker(query, limit);
+        const allResults: SearchResult[] = [];
+        const seenUrls = new Set<string>();
+
+        for (const page of pages) {
+            const pageState = analyzeBlockedPage(page.html);
+            if (pageState.blocked) {
+                throw new Error(`Bing returned a verification or anti-bot page in external browser mode (title: ${pageState.title || 'unknown'}, keywords: ${pageState.detectedKeywords.join(', ') || 'none'})`);
+            }
+            const pageResults = parseBingSearchResults(page.html, limit - allResults.length)
+                .filter((result) => {
+                    if (seenUrls.has(result.url)) {
+                        return false;
+                    }
+                    seenUrls.add(result.url);
+                    return true;
+                });
+            allResults.push(...pageResults);
+            if (allResults.length >= limit) {
+                break;
+            }
+        }
+
+        const finalResults = allResults.slice(0, limit);
+        if (finalResults.length === 0 && hasSiteOperator(query)) {
+            throw new Error('Bing external browser mode returned no results for a site:-restricted query. Retry without the site: prefix.');
+        }
+        return finalResults;
+    }
+
     return retryOnBrowserCrash(() => searchBingWithPlaywrightOnce(query, limit));
 }
 
