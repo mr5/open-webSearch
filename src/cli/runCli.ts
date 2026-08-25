@@ -7,6 +7,7 @@ import https from 'node:https';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { AppConfig } from '../config.js';
+import { isBrowserUnavailableError } from '../utils/playwrightClient.js';
 
 export type CliIo = {
     stdout: (text: string) => void;
@@ -53,8 +54,8 @@ function formatCliHelp(): string {
         'One-shot action commands:',
         '  open-websearch search <query> [--limit N] [--engine NAME] [--engines a,b] [--search-mode MODE] [--daemon-url URL] [--spawn] [--json]',
         '    Search the web. `--search-mode` is request|auto|playwright and currently only affects Bing.',
-        '  open-websearch fetch-web <url> [--max-chars N] [--readability] [--include-links] [--daemon-url URL] [--spawn] [--json]',
-        '    Fetch readable page content. `--readability` enables Mozilla Readability extraction; `--include-links` returns preserved article links.',
+        '  open-websearch fetch-web <url> [--max-chars N] [--render-mode MODE] [--readability] [--include-links] [--daemon-url URL] [--spawn] [--json]',
+        '    Fetch readable page content. `--render-mode` is request|auto|browser; browser renders directly with Playwright. `--readability` enables Mozilla Readability extraction; `--include-links` preserves article links.',
         '  open-websearch fetch-github-readme <url> [--daemon-url URL] [--spawn] [--json]',
         '  open-websearch fetch-csdn <url> [--daemon-url URL] [--spawn] [--json]',
         '  open-websearch fetch-juejin <url> [--daemon-url URL] [--spawn] [--json]',
@@ -94,6 +95,7 @@ export type ParsedFetchWebArgs = {
     maxChars: number;
     readability: boolean;
     includeLinks: boolean;
+    renderMode?: 'request' | 'auto' | 'browser';
     json: boolean;
 };
 
@@ -141,7 +143,14 @@ function parsePositiveTimeout(value: string | undefined, fallback: number): numb
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function getDaemonActionTimeoutMs(transport: DaemonTransportArgs): number {
+function getDaemonActionTimeoutMs(
+    transport: DaemonTransportArgs,
+    path: string,
+    body: Record<string, unknown>
+): number {
+    if (path === '/fetch-web') {
+        return parsePositiveTimeout(process.env.OPEN_WEBSEARCH_DAEMON_ACTION_TIMEOUT_MS, 60000);
+    }
     if (transport.daemonUrlExplicit) {
         return parsePositiveTimeout(process.env.OPEN_WEBSEARCH_DAEMON_ACTION_TIMEOUT_MS, 15000);
     }
@@ -286,6 +295,7 @@ export function parseFetchWebArgs(argv: string[]): ParsedFetchWebArgs {
     let maxChars = 30000;
     let readability = false;
     let includeLinks = false;
+    let renderMode: ParsedFetchWebArgs['renderMode'];
     let json = false;
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -316,6 +326,19 @@ export function parseFetchWebArgs(argv: string[]): ParsedFetchWebArgs {
             continue;
         }
 
+        if (arg === '--render-mode') {
+            const next = argv[index + 1];
+            if (!next || isFlag(next)) {
+                throw new Error('Missing value for --render-mode');
+            }
+            if (next !== 'request' && next !== 'auto' && next !== 'browser') {
+                throw new Error('renderMode must be one of: request, auto, browser');
+            }
+            renderMode = next;
+            index += 1;
+            continue;
+        }
+
         if (isFlag(arg)) {
             throw new Error(`Unknown argument: ${arg}`);
         }
@@ -336,6 +359,7 @@ export function parseFetchWebArgs(argv: string[]): ParsedFetchWebArgs {
         maxChars,
         readability,
         includeLinks,
+        renderMode,
         json
     };
 }
@@ -511,10 +535,24 @@ function formatStatusHumanReadable(status: {
         defaultSearchEngine: string;
         allowedSearchEngines: string[];
         searchMode: string;
+        effectiveSearchMode?: string;
+        playwrightAvailable?: boolean;
+        playwrightUnavailableReason?: string | null;
         useProxy: boolean;
         fetchWebAllowInsecureTls: boolean;
     };
 }): string {
+    const modeLineSuffix = status.configSummary.effectiveSearchMode && status.configSummary.effectiveSearchMode !== status.configSummary.searchMode
+        ? ` (effective: ${status.configSummary.effectiveSearchMode})`
+        : '';
+    const playwrightLines = typeof status.configSummary.playwrightAvailable === 'boolean'
+        ? [
+            `Playwright available: ${status.configSummary.playwrightAvailable ? 'yes' : 'no'}`,
+            ...(!status.configSummary.playwrightAvailable && status.configSummary.playwrightUnavailableReason
+                ? [`Playwright unavailable reason: ${status.configSummary.playwrightUnavailableReason}`]
+                : [])
+        ]
+        : [];
     return [
         `Daemon: ${status.daemon}`,
         `Runtime: ${status.runtime}`,
@@ -524,7 +562,8 @@ function formatStatusHumanReadable(status: {
         `Capabilities: ${status.capabilities.join(', ')}`,
         `Default engine: ${status.configSummary.defaultSearchEngine}`,
         `Allowed engines: ${status.configSummary.allowedSearchEngines.length > 0 ? status.configSummary.allowedSearchEngines.join(', ') : '(all)'}`,
-        `Search mode: ${status.configSummary.searchMode}`,
+        `Search mode: ${status.configSummary.searchMode}${modeLineSuffix}`,
+        ...playwrightLines,
         `Proxy enabled: ${status.configSummary.useProxy ? 'yes' : 'no'}`,
         `Fetch web insecure TLS: ${status.configSummary.fetchWebAllowInsecureTls ? 'yes' : 'no'}`
     ].join('\n');
@@ -541,6 +580,9 @@ type StatusPayload = CliEnvelope<{
         defaultSearchEngine: string;
         allowedSearchEngines: string[];
         searchMode: string;
+        effectiveSearchMode?: string;
+        playwrightAvailable?: boolean;
+        playwrightUnavailableReason?: string | null;
         useProxy: boolean;
         fetchWebAllowInsecureTls: boolean;
     };
@@ -613,7 +655,7 @@ async function requestDaemonEnvelope<T>(
     path: string,
     body: Record<string, unknown>
 ): Promise<CliEnvelope<T>> {
-    const timeoutMs = getDaemonActionTimeoutMs(transport);
+    const timeoutMs = getDaemonActionTimeoutMs(transport, path, body);
 
     try {
         return await requestJsonWithTimeout<CliEnvelope<T>>(new URL(path, transport.daemonUrl).toString(), {
@@ -653,7 +695,7 @@ async function tryDaemonRequest<T>(
 
         if (
             !transport.daemonUrlExplicit &&
-            (error instanceof DaemonUnavailableError || error instanceof DaemonRequestTimeoutError || error instanceof DaemonRequestFailedError)
+            error instanceof DaemonUnavailableError
         ) {
             return null;
         }
@@ -691,6 +733,11 @@ function getDaemonCliErrorCode(error: unknown): string {
         return 'daemon_request_failed';
     }
 
+    // 强制 Playwright 而配置无效：直接暴露配置错误，不再归入通用的 engine_error。
+    if (isBrowserUnavailableError(error)) {
+        return 'browser_unavailable';
+    }
+
     return 'engine_error';
 }
 
@@ -705,6 +752,10 @@ function getDaemonCliErrorHint(error: unknown): string {
 
     if (error instanceof DaemonRequestFailedError) {
         return 'The daemon accepted the request but did not complete it cleanly. Inspect daemon logs or retry without --daemon-url to use direct execution.';
+    }
+
+    if (isBrowserUnavailableError(error)) {
+        return 'Fix the Playwright configuration (install a client package, set PLAYWRIGHT_MODULE_PATH or a remote endpoint, provide a browser binary), or retry with --search-mode request.';
     }
 
     return 'Retry with a different engine, or inspect proxy and search mode settings.';
@@ -901,11 +952,11 @@ export async function runCli(
                 io.stdout(JSON.stringify(createErrorEnvelope(
                     'invalid_arguments',
                     message,
-                    { hint: 'Use `open-websearch fetch-web <url> [--max-chars N] [--json]`.' }
+                    { hint: 'Use `open-websearch fetch-web <url> [--max-chars N] [--render-mode request|auto|browser] [--json]`.' }
                 ), null, 2));
             } else {
                 io.stderr(message);
-                io.stderr('Usage: open-websearch fetch-web <url> [--max-chars N] [--readability] [--include-links] [--json]');
+                io.stderr('Usage: open-websearch fetch-web <url> [--max-chars N] [--render-mode request|auto|browser] [--readability] [--include-links] [--json]');
             }
             return 1;
         }
@@ -918,7 +969,8 @@ export async function runCli(
                     url: parsed.url,
                     maxChars: parsed.maxChars,
                     readability: parsed.readability,
-                    includeLinks: parsed.includeLinks
+                    includeLinks: parsed.includeLinks,
+                    renderMode: parsed.renderMode
                 },
                 options
             );
@@ -940,7 +992,8 @@ export async function runCli(
                 url: parsed.url,
                 maxChars: parsed.maxChars,
                 readability: parsed.readability,
-                includeLinks: parsed.includeLinks
+                includeLinks: parsed.includeLinks,
+                renderMode: parsed.renderMode
             });
 
             if (parsed.json) {
@@ -951,13 +1004,21 @@ export async function runCli(
             return 0;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
+            // 直连(非 daemon)路径: renderMode=browser 而 Playwright/浏览器不可用时,
+            // 与 daemon 的 /fetch-web 保持一致, 返回 browser_unavailable 而非 validation_failed。
+            const directBrowserUnavailable = !isDaemonRequestError(error)
+                && isBrowserUnavailableError(error);
             if (parsed.json) {
                 io.stdout(JSON.stringify(createErrorEnvelope(
-                    isDaemonRequestError(error) ? getDaemonCliErrorCode(error) : 'validation_failed',
+                    isDaemonRequestError(error)
+                        ? getDaemonCliErrorCode(error)
+                        : (directBrowserUnavailable ? 'browser_unavailable' : 'validation_failed'),
                     message,
                     { hint: isDaemonRequestError(error)
                         ? getDaemonCliErrorHint(error)
-                        : 'Use a public HTTP(S) URL and keep maxChars within the supported range.' }
+                        : (directBrowserUnavailable
+                            ? 'Configure a usable Playwright client and browser target, or retry with renderMode request/auto.'
+                            : 'Use a public HTTP(S) URL, keep maxChars within the supported range, and use renderMode request, auto, or browser.') }
                 ), null, 2));
             } else {
                 io.stderr(`${getDaemonCliErrorLabel(error, 'Fetch failed')}: ${message}`);

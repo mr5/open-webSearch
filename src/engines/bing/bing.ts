@@ -1,9 +1,9 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { AppConfig, config } from '../../config.js';
+import { AppConfig, config, getEffectiveSearchMode, checkPlaywrightModeConfiguration } from '../../config.js';
 import { SearchResult } from '../../types.js';
 import { parseBingSearchResults } from './parser.js';
-import { acquirePooledPlaywrightPage, getPlaywrightModuleSource, loadPlaywrightClient, openPlaywrightBrowser } from '../../utils/playwrightClient.js';
+import { acquirePooledPlaywrightPage, getPlaywrightModuleSource, loadPlaywrightClient, openPlaywrightBrowser, retryOnBrowserCrash } from '../../utils/playwrightClient.js';
 import { buildAxiosRequestOptions as buildSharedAxiosRequestOptions } from '../../utils/httpRequest.js';
 import { checkBrowserWorker, searchBingWithBrowserWorker } from '../../utils/browserWorkerClient.js';
 
@@ -125,83 +125,8 @@ function buildBingAxiosRequestOptions(): any {
     });
 }
 
-let browserAvailabilityPromise: Promise<boolean> | null = null;
-let hasVerifiedBrowserAvailability = false;
-let hasLoggedHiddenHeadedMode = false;
-
-function shouldUseHiddenHeadedBingBrowser(): boolean {
-    return process.platform === 'win32'
-        && config.playwrightHeadless
-        && !config.playwrightWsEndpoint
-        && !config.playwrightCdpEndpoint;
-}
-
-function getEffectiveBingPlaywrightHeadless(): boolean {
-    if (shouldUseHiddenHeadedBingBrowser()) {
-        if (!hasLoggedHiddenHeadedMode) {
-            hasLoggedHiddenHeadedMode = true;
-            console.warn('Bing Playwright search is using a hidden headed browser on Windows because PLAYWRIGHT_HEADLESS=true is more likely to trigger anti-bot detection.');
-        }
-        return false;
-    }
-
-    return config.playwrightHeadless;
-}
-
-function buildDefaultBrowserLaunchArgs(hideWindow: boolean): string[] {
-    const args = [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--disable-site-isolation-trials',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-features=TranslateUI',
-        '--disable-ipc-flooding-protection'
-    ];
-
-    if (hideWindow) {
-        args.push('--disable-extensions');
-        args.push('--no-default-browser-check');
-        args.push('--window-position=-32000,-32000');
-        args.push('--window-size=1,1');
-    }
-
-    return args;
-}
-
-function buildWindowsBrowserLaunchArgs(hideWindow: boolean): string[] {
-    // 修复 Windows/Edge 有头浏览器连续提示“不受支持的命令行标志”的问题：Windows 路径使用 allowlist，避免把 Linux/root 或跨站安全绕过类参数带到用户可见浏览器窗口里。
-    const args = [
-        '--no-first-run'
-    ];
-
-    if (hideWindow) {
-        args.push('--no-default-browser-check');
-        args.push('--window-position=-32000,-32000');
-        args.push('--window-size=1,1');
-    }
-
-    return args;
-}
-
-function buildBrowserLaunchArgs(hideWindow: boolean, platform: NodeJS.Platform = process.platform): string[] {
-    return platform === 'win32'
-        ? buildWindowsBrowserLaunchArgs(hideWindow)
-        : buildDefaultBrowserLaunchArgs(hideWindow);
-}
-
-export function __buildBingBrowserLaunchArgsForTests(hideWindow: boolean, platform?: NodeJS.Platform): string[] {
-    return buildBrowserLaunchArgs(hideWindow, platform);
-}
+let playwrightAvailabilityPromise: Promise<boolean> | null = null;
+let hasVerifiedPlaywrightAvailability = false;
 
 async function setupAntiDetection(page: any): Promise<void> {
     await page.addInitScript(() => {
@@ -392,27 +317,36 @@ async function getBingResultsSignature(page: any): Promise<string> {
 }
 
 async function waitForBingResultsChanged(page: any, previousSignature: string): Promise<void> {
-    await page.waitForFunction((previous: string) => {
-        const container = document.querySelector('#b_results') || document.querySelector('#b_content');
-        const current = (container?.textContent || '').replace(/\s+/g, ' ').trim();
-        return current.length > 0 && current !== previous;
-    }, previousSignature, { timeout: getBingUiTimeoutMs() });
+    await page.waitForFunction(
+        `(previous) => {
+            const container = document.querySelector('#b_results') || document.querySelector('#b_content');
+            const current = (container?.textContent || '').replace(/\\s+/g, ' ').trim();
+            return current.length > 0 && current !== previous;
+        }`,
+        previousSignature,
+        { timeout: getBingUiTimeoutMs() }
+    );
 }
 
 async function waitForBingSearchInputValue(page: any, expectedValue: string): Promise<void> {
-    await page.waitForFunction(({ selectors, value }: { selectors: string[]; value: string }) => {
-        const isVisible = (element: Element) => {
-            const style = window.getComputedStyle(element);
-            return style.visibility !== 'hidden'
-                && style.display !== 'none'
-                && element.getClientRects().length > 0;
-        };
-
-        return selectors.some((selector) => {
-            const input = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
-            return input !== null && isVisible(input) && input.value === value;
-        });
-    }, { selectors: SEARCH_INPUT_SELECTORS, value: expectedValue }, { timeout: getBingUiTimeoutMs() });
+    const selectors = SEARCH_INPUT_SELECTORS;
+    const timeout = getBingUiTimeoutMs();
+    // 使用字符串函数避免 tsx 注入 __name 变量导致 ReferenceError。
+    // Playwright 签名是 waitForFunction(pageFunction, arg, options)，只接受单个 arg，因此把两个参数包装成一个对象传入，否则页面侧 expectedValue 会是 undefined 且 timeout options 也不会生效。
+    await page.waitForFunction(
+        `({ selectors, expectedValue }) => {
+            const isVisible = (el) => {
+                const s = window.getComputedStyle(el);
+                return s.visibility !== 'hidden' && s.display !== 'none' && el.getClientRects().length > 0;
+            };
+            return selectors.some((sel) => {
+                const input = document.querySelector(sel);
+                return input !== null && isVisible(input) && input.value === expectedValue;
+            });
+        }`,
+        { selectors, expectedValue },
+        { timeout }
+    );
 }
 
 async function waitForAnyDeterministicSignal(signals: Array<Promise<unknown>>, timeoutMs: number): Promise<boolean> {
@@ -628,37 +562,33 @@ async function goToNextResultsPage(page: any): Promise<boolean> {
     return false;
 }
 
-async function isBrowserAvailable(): Promise<boolean> {
-    if (hasVerifiedBrowserAvailability) {
+async function isPlaywrightAvailable(): Promise<boolean> {
+    if (hasVerifiedPlaywrightAvailability) {
         return true;
     }
 
-    if (!browserAvailabilityPromise) {
-        browserAvailabilityPromise = (async () => {
+    if (!playwrightAvailabilityPromise) {
+        playwrightAvailabilityPromise = (async () => {
             if (config.browserBackend === 'external') {
                 try {
                     await checkBrowserWorker();
-                    hasVerifiedBrowserAvailability = true;
+                    hasVerifiedPlaywrightAvailability = true;
                     return true;
                 } catch (error) {
                     console.warn('External browser worker is unavailable, auto fallback will retry on the next blocked request:', error);
                     return false;
                 }
             }
+
             const playwright = await loadPlaywrightClient({ silent: true });
             if (!playwright) {
                 return false;
             }
 
             try {
-                const effectiveHeadless = getEffectiveBingPlaywrightHeadless();
-                const session = await openPlaywrightBrowser(
-                    effectiveHeadless,
-                    buildBrowserLaunchArgs(shouldUseHiddenHeadedBingBrowser()),
-                    { hideWindow: shouldUseHiddenHeadedBingBrowser() }
-                );
+                const session = await openPlaywrightBrowser({ antiBot: true });
                 await session.release();
-                hasVerifiedBrowserAvailability = true;
+                hasVerifiedPlaywrightAvailability = true;
                 return true;
             } catch (error) {
                 const playwrightModuleSource = getPlaywrightModuleSource();
@@ -666,13 +596,13 @@ async function isBrowserAvailable(): Promise<boolean> {
                 return false;
             }
         })().finally(() => {
-            if (!hasVerifiedBrowserAvailability) {
-                browserAvailabilityPromise = null;
+            if (!hasVerifiedPlaywrightAvailability) {
+                playwrightAvailabilityPromise = null;
             }
         });
     }
 
-    return browserAvailabilityPromise;
+    return playwrightAvailabilityPromise;
 }
 
 async function searchBingWithHttp(query: string, limit: number): Promise<SearchResult[]> {
@@ -705,7 +635,7 @@ async function searchBingWithHttp(query: string, limit: number): Promise<SearchR
     return allResults.slice(0, limit);
 }
 
-async function searchBingWithBrowser(query: string, limit: number): Promise<SearchResult[]> {
+async function searchBingWithPlaywright(query: string, limit: number): Promise<SearchResult[]> {
     if (config.browserBackend === 'external') {
         const pages = await searchBingWithBrowserWorker(query, limit);
         const allResults: SearchResult[] = [];
@@ -737,17 +667,16 @@ async function searchBingWithBrowser(query: string, limit: number): Promise<Sear
         return finalResults;
     }
 
+    return retryOnBrowserCrash(() => searchBingWithPlaywrightOnce(query, limit));
+}
+
+async function searchBingWithPlaywrightOnce(query: string, limit: number): Promise<SearchResult[]> {
     const playwright = await loadPlaywrightClient();
     if (!playwright) {
         throw new Error('Playwright client is not available. Install `playwright`/`playwright-core` manually or configure PLAYWRIGHT_MODULE_PATH.');
     }
 
-    const effectiveHeadless = getEffectiveBingPlaywrightHeadless();
-    const session = await openPlaywrightBrowser(
-        effectiveHeadless,
-        buildBrowserLaunchArgs(shouldUseHiddenHeadedBingBrowser()),
-        { hideWindow: shouldUseHiddenHeadedBingBrowser() }
-    );
+    const session = await openPlaywrightBrowser({ antiBot: true });
 
     try {
         const { page, releasePage } = await acquirePooledPlaywrightPage(session.browser, {
@@ -825,25 +754,32 @@ export async function searchBing(
     limit: number,
     options?: { searchMode?: AppConfig['searchMode'] }
 ): Promise<SearchResult[]> {
-    const effectiveSearchMode = options?.searchMode ?? config.searchMode;
+    // 请求级未显式覆盖时使用服务端模式：强制 request/playwright 原样采用，SEARCH_MODE=auto 但 Playwright 必需参数未配置时退回强制请求模式。
+    const effectiveSearchMode = options?.searchMode ?? getEffectiveSearchMode(config);
 
     if (effectiveSearchMode === 'request') {
         return searchBingWithHttp(query, limit);
     }
 
     if (effectiveSearchMode === 'playwright') {
-        return searchBingWithBrowser(query, limit);
+        const availability = checkPlaywrightModeConfiguration(config);
+        if (!availability.available) {
+            const unavailableError = new Error(`Playwright mode is required but the Playwright configuration is invalid: ${availability.reason}`);
+            (unavailableError as Error & { code?: string }).code = 'browser_unavailable';
+            throw unavailableError;
+        }
+        return searchBingWithPlaywright(query, limit);
     }
 
     try {
         return await searchBingWithHttp(query, limit);
     } catch (requestError) {
-        const canUsePlaywright = await isBrowserAvailable();
+        const canUsePlaywright = await isPlaywrightAvailable();
         if (!canUsePlaywright) {
             throw requestError;
         }
 
         console.warn('Request-based Bing search failed, falling back to Playwright mode:', requestError);
-        return searchBingWithBrowser(query, limit);
+        return searchBingWithPlaywright(query, limit);
     }
 }

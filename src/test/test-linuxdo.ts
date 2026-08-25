@@ -1,38 +1,54 @@
-import { searchLinuxDo } from '../engines/linuxdo/index.js';
+import { searchLinuxDoWithSearchers } from '../engines/linuxdo/linuxdo.js';
+import { SearchResult } from '../types.js';
 
-async function testLinuxDoSearch() {
-  console.log('🔍 Starting LinuxDo search test...');
-
-  try {
-    const query = 'websearchmcp';
-    const maxResults = 20;
-
-    console.log(`📝 Search query: ${query}`);
-    console.log(`📊 Maximum results: ${maxResults}`);
-
-    const results = await searchLinuxDo(query, maxResults);
-
-    console.log(`🎉 Search completed, retrieved ${results.length} results:`);
-    results.forEach((result, index) => {
-      console.log(`\n${index + 1}. ${result.title}`);
-      console.log(`   🔗 ${result.url}`);
-      console.log(`   📄 ${result.description.substring(0, 100)}...`);
-      console.log(`   🌐 Source: ${result.source}`);
-    });
-
-    return results;
-  } catch (error) {
-    console.error('❌ Test failed:', error);
-    return [];
-  }
+function assert(condition: unknown, message: string): asserts condition {
+    if (!condition) {
+        throw new Error(message);
+    }
 }
 
-// Run the test
-testLinuxDoSearch()
-  .then(() => {
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+function result(url: string, engine: string): SearchResult {
+    return {
+        title: url,
+        url,
+        description: '',
+        source: new URL(url).hostname,
+        engine
+    };
+}
+
+const calls: string[] = [];
+const results = await searchLinuxDoWithSearchers('ChatGPT', 5, 'bing', {
+    bing: async (query) => {
+        calls.push(`bing:${query}`);
+        return [result('https://chatgpt.com/', 'bing')];
+    },
+    duckduckgo: async (query) => {
+        calls.push(`duckduckgo:${query}`);
+        return [
+            result('https://linux.do/t/topic/123', 'duckduckgo'),
+            result('https://check.linux.do/group/example', 'duckduckgo'),
+            result('https://example.com/not-linuxdo', 'duckduckgo')
+        ];
+    },
+    brave: async (query) => {
+        calls.push(`brave:${query}`);
+        return [];
+    }
+});
+
+assert(calls.length === 2, `expected Bing then DuckDuckGo, got ${calls.join(', ')}`);
+assert(calls[0] === 'bing:site:linux.do ChatGPT', 'site query should be passed to the preferred engine');
+assert(calls[1] === 'duckduckgo:site:linux.do ChatGPT', 'off-domain preferred results should trigger DuckDuckGo');
+assert(results.length === 2, `expected two linux.do results, got ${results.length}`);
+assert(results.every((item) => item.source === 'linux.do'), 'result source should be normalized');
+assert(results.every((item) => item.engine === 'linuxdo'), 'result engine should be normalized');
+
+const recovered = await searchLinuxDoWithSearchers('Claude', 5, 'bing', {
+    bing: async () => { throw new Error('blocked'); },
+    duckduckgo: async () => [result('https://linux.do/t/topic/456', 'duckduckgo')],
+    brave: async () => []
+});
+
+assert(recovered.length === 1, 'a preferred-engine failure should fall back to DuckDuckGo');
+console.log('✅ Linux.do search fallback tests passed');
