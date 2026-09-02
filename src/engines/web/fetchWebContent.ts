@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import { JSDOM } from 'jsdom';
-import { config } from '../../config.js';
+import { checkPlaywrightModeConfiguration, config } from '../../config.js';
 import { buildAxiosRequestOptions, requestWithSafeRedirects } from '../../utils/httpRequest.js';
 import { assertPublicHttpUrl, assertPublicHttpUrlResolved } from '../../utils/urlSafety.js';
 import {
@@ -15,6 +15,7 @@ import {
     loadPlaywrightClient,
     openPlaywrightBrowser,
     acquirePooledPlaywrightPage,
+    asBrowserUnavailableError,
     type PlaywrightBrowserSession
 } from '../../utils/playwrightClient.js';
 
@@ -46,6 +47,26 @@ export type FetchWebContentOptions = {
 };
 
 export type FetchWebRenderMode = 'request' | 'auto' | 'browser';
+
+const EXTERNAL_BROWSER_ONLY_HOSTS = [
+    'jd.com',
+    'jd.hk',
+    'taobao.com',
+    'tb.cn',
+    'tmall.com',
+    'tmall.hk',
+    '1688.com',
+    'alibaba.com',
+    'xiaohongshu.com',
+    'xhslink.com',
+    'zhihu.com'
+];
+
+export function requiresExternalBrowserForUrl(url: URL | string): boolean {
+    const parsed = typeof url === 'string' ? new URL(url) : url;
+    const hostname = parsed.hostname.toLowerCase();
+    return EXTERNAL_BROWSER_ONLY_HOSTS.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+}
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_MAX_CHARS = 30000;
@@ -631,7 +652,23 @@ export async function fetchWebContent(
 ): Promise<FetchWebContentResult> {
     const parsedUrl = new URL(url);
     await assertPublicHttpUrlResolved(parsedUrl, 'Request URL');
-    const renderMode = options.renderMode ?? 'auto';
+    const externalBrowserRequired = requiresExternalBrowserForUrl(parsedUrl);
+    if (externalBrowserRequired && config.browserBackend !== 'external') {
+        throw asBrowserUnavailableError(
+            new Error('Set BROWSER_BACKEND=external and configure BROWSER_WORKER_URL plus BROWSER_WORKER_TOKEN. Direct HTTP and local Chromium fetches are intentionally disabled for this protected site.'),
+            `External browser fetch is required for ${parsedUrl.hostname}`
+        );
+    }
+    if (externalBrowserRequired) {
+        const availability = checkPlaywrightModeConfiguration(config);
+        if (!availability.available) {
+            throw asBrowserUnavailableError(
+                new Error(availability.reason || 'External browser worker is not configured'),
+                `External browser fetch is required for ${parsedUrl.hostname}`
+            );
+        }
+    }
+    const renderMode = externalBrowserRequired ? 'browser' : (options.renderMode ?? 'auto');
     if (!['request', 'auto', 'browser'].includes(renderMode)) {
         throw new Error('renderMode must be one of: request, auto, browser');
     }

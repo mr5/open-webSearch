@@ -6,7 +6,10 @@ import { assertPublicHttpUrl, assertPublicHttpUrlResolved } from './urlSafety.js
 
 const COOKIE_CACHE_TTL_MS = 10 * 60 * 1000;
 const COOKIE_WARMUP_DELAY_MS = 1200;
-export const MAX_BROWSER_HTML_BYTES = 2 * 1024 * 1024;
+// Large marketplace pages (notably signed-in 1688 product pages) routinely exceed
+// 2 MiB. Keep this below the worker's 12 MiB response ceiling while leaving enough
+// room for the JSON envelope and UTF-8 expansion.
+export const MAX_BROWSER_HTML_BYTES = 8 * 1024 * 1024;
 const COOKIE_CONTEXT_OPTIONS = {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
     locale: 'zh-CN',

@@ -8,6 +8,7 @@ export type BrowserWorkerRenderResult = {
     title: string;
     cookieHeader?: string;
     dialogTexts?: string[];
+    interactionRequired?: boolean;
 };
 
 export type BrowserWorkerPage = {
@@ -110,4 +111,21 @@ export async function searchBingWithBrowserWorker(query: string, limit: number):
         throw new Error('Browser worker returned an invalid Bing response');
     }
     return result.pages;
+}
+
+export async function searchSiteWithBrowserWorker(
+    engine: 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu',
+    query: string,
+    limit: number
+): Promise<BrowserWorkerRenderResult> {
+    const result = await requestWorker<{ page: BrowserWorkerRenderResult }>('site-search', {
+        engine,
+        query,
+        limit,
+        timeout_ms: Math.max(config.playwrightNavigationTimeoutMs, 15000)
+    });
+    if (!result.page || typeof result.page.html !== 'string' || typeof result.page.finalUrl !== 'string') {
+        throw new Error('Browser worker returned an invalid site-search response');
+    }
+    return result.page;
 }

@@ -151,7 +151,9 @@ Notes:
 - `limit` is optional, integer `1-50`, default `10`
 - `engines` is optional
 - `searchMode` is optional: `request`, `auto`, or `playwright`
-- `searchMode` currently only affects Bing; other engines ignore it
+- `searchMode` affects Bing. `jd`, `taobao`, `alibaba` (1688), `xiaohongshu`, and `zhihu` always require `BROWSER_BACKEND=external`, even when `searchMode=request`; local Chromium and direct HTTP are disabled for them.
+- `fetchWebContent` also forces the external browser for URLs on these sites, overriding `renderMode=request`. It fails with `browser_unavailable` instead of falling back when the worker is not configured.
+- If one of these external-browser-only engines needs login or a CAPTCHA, its partial failure uses `code: "interaction_required"`. Complete the challenge in the worker's persistent site tab and retry.
 - if `engines` is omitted, the daemon uses its configured default engine
 - when the effective mode is `playwright` but the Playwright configuration is invalid, the daemon returns `status: "error"` with `error.code: "browser_unavailable"`
 

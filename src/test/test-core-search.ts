@@ -48,6 +48,11 @@ function testNormalizeEngineName(): void {
     assertEqual(normalizeEngineName('搜狗'), 'sogou', 'normalizes Chinese Sogou alias');
     assertEqual(normalizeEngineName('Hacker News'), 'hackernews', 'normalizes Hacker News alias');
     assertEqual(normalizeEngineName('hn'), 'hackernews', 'normalizes HN alias');
+    assertEqual(normalizeEngineName('京东'), 'jd', 'normalizes JD alias');
+    assertEqual(normalizeEngineName('淘宝'), 'taobao', 'normalizes Taobao alias');
+    assertEqual(normalizeEngineName('1688'), 'alibaba', 'normalizes Alibaba alias');
+    assertEqual(normalizeEngineName('小红书'), 'xiaohongshu', 'normalizes Xiaohongshu alias');
+    assertEqual(normalizeEngineName('知乎'), 'zhihu', 'normalizes Zhihu alias');
     assertEqualArray([...SUPPORTED_SEARCH_ENGINES], [
         'baidu',
         'bing',
@@ -59,7 +64,12 @@ function testNormalizeEngineName(): void {
         'juejin',
         'startpage',
         'sogou',
-        'hackernews'
+        'hackernews',
+        'jd',
+        'taobao',
+        'alibaba',
+        'xiaohongshu',
+        'zhihu'
     ], 'supported engines list');
     console.log('✅ normalizeEngineName and supported engines');
 }

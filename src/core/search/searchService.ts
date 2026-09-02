@@ -11,7 +11,7 @@ export type SearchEngineExecutorMap = Partial<Record<string, SearchEngineExecuto
 
 export type SearchExecutionFailure = {
     engine: string;
-    code: 'engine_error' | 'unsupported_engine' | 'browser_unavailable';
+    code: 'engine_error' | 'unsupported_engine' | 'browser_unavailable' | 'interaction_required';
     message: string;
 };
 

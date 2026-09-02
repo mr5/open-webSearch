@@ -32,6 +32,17 @@ async function run(): Promise<void> {
             }));
             return;
         }
+        if (request.url === '/site-search') {
+            response.end(JSON.stringify({
+                page: {
+                    html: '<html>jd</html>',
+                    finalUrl: 'https://search.jd.com/Search?keyword=example',
+                    title: 'JD',
+                    interactionRequired: false
+                }
+            }));
+            return;
+        }
         response.end(JSON.stringify({ detail: 'unknown route' }));
     });
 
@@ -50,7 +61,8 @@ async function run(): Promise<void> {
         const {
             checkBrowserWorker,
             renderPageWithBrowserWorker,
-            searchBingWithBrowserWorker
+            searchBingWithBrowserWorker,
+            searchSiteWithBrowserWorker
         } = await import('../utils/browserWorkerClient.js');
 
         await checkBrowserWorker();
@@ -62,7 +74,11 @@ async function run(): Promise<void> {
         if (pages.length !== 1 || pages[0].title !== 'Bing') {
             throw new Error(`unexpected Bing response: ${JSON.stringify(pages)}`);
         }
-        if (receivedPaths.join(',') !== '/health,/render,/bing-search') {
+        const sitePage = await searchSiteWithBrowserWorker('jd', 'example', 3);
+        if (sitePage.title !== 'JD' || sitePage.interactionRequired !== false) {
+            throw new Error(`unexpected site-search response: ${JSON.stringify(sitePage)}`);
+        }
+        if (receivedPaths.join(',') !== '/health,/render,/bing-search,/site-search') {
             throw new Error(`unexpected worker request paths: ${receivedPaths.join(',')}`);
         }
         console.log('✅ external browser worker client authenticates and validates responses');

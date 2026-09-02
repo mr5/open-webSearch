@@ -9,6 +9,7 @@ import {
 } from '../engines/web/index.js';
 import { __setReadabilityParserForTests } from '../engines/web/fetchWebContent.js';
 import { __setAxiosRequestForTests } from '../utils/httpRequest.js';
+import { MAX_BROWSER_HTML_BYTES } from '../utils/browserCookies.js';
 import { __resetPlaywrightClientForTests } from '../utils/playwrightClient.js';
 import { __setDnsLookupForTests } from '../utils/urlSafety.js';
 
@@ -495,10 +496,25 @@ async function main(): Promise<void> {
             }
         },
         {
+            name: 'browser mode should accept marketplace-sized rendered html',
+            run: async () => {
+                __setBrowserHtmlFetcherForTests(async () => ({
+                    html: `<html><body><main>1688 product</main>${'x'.repeat(3 * 1024 * 1024)}</body></html>`,
+                    finalUrl: 'https://example.com/marketplace-product',
+                    title: '1688 Product'
+                }));
+
+                const result = await fetchWebContent('https://example.com/marketplace-product', 5000, {
+                    renderMode: 'browser'
+                });
+                assert(result.content.includes('1688 product'), 'browser mode should accept a 3 MiB marketplace page');
+            }
+        },
+        {
             name: 'browser mode should reject oversized rendered html',
             run: async () => {
                 __setBrowserHtmlFetcherForTests(async () => ({
-                    html: `<html><body>${'x'.repeat(2 * 1024 * 1024)}</body></html>`,
+                    html: `<html><body>${'x'.repeat(MAX_BROWSER_HTML_BYTES)}</body></html>`,
                     finalUrl: 'https://example.com/oversized-browser',
                     title: 'Oversized'
                 }));

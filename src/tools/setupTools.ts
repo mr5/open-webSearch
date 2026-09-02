@@ -55,7 +55,7 @@ export const setupTools = (server: McpServer, runtime: OpenWebSearchRuntime): vo
             ? ' searchMode meanings: request performs plain HTTP scraping, playwright drives a real browser through Playwright, and auto or omitting searchMode lets the server decide (request first, falling back to Playwright when it is blocked). Start with the default auto (or omit searchMode). Only retry the same query with searchMode=playwright when the request-based results fail, come back empty, or are clearly blocked or low-quality, for example anti-bot or verification pages.'
             : '';
         if (runtime.config.allowedSearchEngines.length === 0) {
-            return `Search the web using multiple engines (e.g., Baidu, Bing, DuckDuckGo, CSDN, Exa, Brave, Juejin(掘金), Startpage, Sogou(搜狗), Hacker News) with no API key required.${searchModeDescription}`;
+            return `Search the web using multiple engines (e.g., Baidu, Bing, DuckDuckGo, CSDN, Exa, Brave, Juejin(掘金), Startpage, Sogou(搜狗), Hacker News, JD(京东), Taobao(淘宝), Alibaba/1688(阿里巴巴), Xiaohongshu(小红书), Zhihu(知乎)) with no API key required. JD, Taobao, Alibaba/1688, Xiaohongshu, and Zhihu require BROWSER_BACKEND=external; local Chromium and direct HTTP are intentionally disabled for them.${searchModeDescription}`;
         } else {
             const enginesText = runtime.config.allowedSearchEngines.map(e => {
                 switch (e) {
@@ -67,6 +67,16 @@ export const setupTools = (server: McpServer, runtime: OpenWebSearchRuntime): vo
                         return 'Sogou(搜狗)';
                     case 'hackernews':
                         return 'Hacker News';
+                    case 'jd':
+                        return 'JD(京东)';
+                    case 'taobao':
+                        return 'Taobao(淘宝)';
+                    case 'alibaba':
+                        return 'Alibaba/1688(阿里巴巴)';
+                    case 'xiaohongshu':
+                        return 'Xiaohongshu(小红书)';
+                    case 'zhihu':
+                        return 'Zhihu(知乎)';
                     default:
                         return e.charAt(0).toUpperCase() + e.slice(1);
                 }
@@ -369,4 +379,3 @@ export const setupTools = (server: McpServer, runtime: OpenWebSearchRuntime): vo
         }
     );
 };
-

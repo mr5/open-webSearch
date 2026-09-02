@@ -1,3 +1,2 @@
 export { fetchZhiHuArticle } from './fetchZhihuArticle.js';
-export { searchZhiHu } from './zhihu.js';
-
+export { searchZhiHu, searchZhihu } from './zhihu.js';

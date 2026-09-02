@@ -9,7 +9,12 @@ export const SUPPORTED_SEARCH_ENGINES = [
     'juejin',
     'startpage',
     'sogou',
-    'hackernews'
+    'hackernews',
+    'jd',
+    'taobao',
+    'alibaba',
+    'xiaohongshu',
+    'zhihu'
 ] as const;
 
 export type SupportedSearchEngine = typeof SUPPORTED_SEARCH_ENGINES[number];
@@ -44,6 +49,24 @@ export function normalizeEngineName(engine: string): string {
         case 'hackernews':
         case 'hn':
             return 'hackernews';
+        case 'jd':
+        case 'jingdong':
+        case '京东':
+            return 'jd';
+        case 'taobao':
+        case '淘宝':
+            return 'taobao';
+        case 'alibaba':
+        case '1688':
+        case '阿里巴巴':
+            return 'alibaba';
+        case 'xiaohongshu':
+        case 'xhs':
+        case '小红书':
+            return 'xiaohongshu';
+        case 'zhihu':
+        case '知乎':
+            return 'zhihu';
         default:
             return cleaned;
     }

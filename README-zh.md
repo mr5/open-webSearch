@@ -127,8 +127,13 @@ MCP工具支持：
     - startpage
     - sogou
     - hackernews
+    - jd（京东，仅 external browser）
+    - taobao（淘宝，仅 external browser）
+    - alibaba / 1688（阿里巴巴，仅 external browser）
+    - xiaohongshu（小红书，仅 external browser）
+    - zhihu（知乎，仅 external browser）
 - 支持HTTP代理配置，轻松解决网络访问限制
-- 无需API密钥或身份验证
+- 无需搜索 API 密钥；受保护站点使用 external browser worker Profile 中已保存的登录态
 - 返回带标题、URL和描述的结构化结果
 - 可配置每次搜索返回的结果数量
 - 可自定义默认搜索引擎
@@ -262,7 +267,7 @@ npx cross-env DEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true open-websearch
 |--------|-------------------------|--------|--------------------------------------|
 | `ENABLE_CORS` | `false`                 | `true`, `false` | 启用CORS                               |
 | `CORS_ORIGIN` | `*`                     | 任何有效来源 | CORS来源配置                             |
-| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews` | 默认搜索引擎                               |
+| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews`, `jd`, `taobao`, `alibaba`, `xiaohongshu`, `zhihu` | 默认搜索引擎                               |
 | `USE_PROXY` | `false`                 | `true`, `false` | 启用HTTP代理                             |
 | `PROXY_URL` | `http://127.0.0.1:7890` | 任何有效URL | 代理服务器URL                             |
 | `FETCH_WEB_INSECURE_TLS` | `false` | `true`, `false` | 仅对 `fetchWebContent` 的请求路径关闭 TLS 校验，不影响 Playwright 浏览器导航。只建议在证书链异常时临时使用 |
@@ -530,7 +535,7 @@ docker run -d --name web-search -p 3000:3000 -e ENABLE_CORS=true -e CORS_ORIGIN=
 |--------|-------------------------|--------|------|
 | `ENABLE_CORS` | `false`                 | `true`, `false` | 启用CORS |
 | `CORS_ORIGIN` | `*`                     | 任何有效来源 | CORS来源配置 |
-| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews` | 默认搜索引擎 |
+| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews`, `jd`, `taobao`, `alibaba`, `xiaohongshu`, `zhihu` | 默认搜索引擎 |
 | `USE_PROXY` | `false`                 | `true`, `false` | 启用HTTP代理 |
 | `PROXY_URL` | `http://127.0.0.1:7890` | 任何有效URL | 代理服务器URL |
 | `PORT` | `3000`                  | 1-65535 | 服务器端口 |
@@ -571,7 +576,7 @@ docker run -d --name web-search -p 3000:3000 -e ENABLE_CORS=true -e CORS_ORIGIN=
 {
   "query": string,        // 搜索查询词
   "limit": number,        // 可选：返回结果数量（默认：10）
-  "engines": string[],    // 可选：使用的引擎 (bing,baidu,linuxdo,csdn,duckduckgo,exa,brave,juejin,startpage,sogou,hackernews) 默认使用当前运行配置
+  "engines": string[],    // 可选：使用的引擎 (bing,baidu,linuxdo,csdn,duckduckgo,exa,brave,juejin,startpage,sogou,hackernews,jd,taobao,alibaba,xiaohongshu,zhihu) 默认使用当前运行配置
   "searchMode": string    // 可选：request、auto 或 playwright（当前仅对 Bing 生效）
 }
 ```
@@ -803,7 +808,8 @@ use_mcp_tool({
 
 4. **搜索引擎配置**：
    - 可通过环境变量`DEFAULT_SEARCH_ENGINE`设置默认搜索引擎
-   - 支持的引擎有：bing, duckduckgo, exa, brave, baidu, csdn, linuxdo, juejin, startpage, sogou, hackernews
+   - 支持的引擎有：bing, duckduckgo, exa, brave, baidu, csdn, linuxdo, juejin, startpage, sogou, hackernews, jd（京东）, taobao（淘宝）, alibaba（阿里巴巴/1688）, xiaohongshu（小红书）, zhihu（知乎）
+   - 京东、淘宝、阿里巴巴/1688、小红书、知乎必须配置 `BROWSER_BACKEND=external`；这些站点的搜索和 `fetchWebContent` 均不会使用直连 HTTP 或本地 Chromium。External worker 会保留已登录的站点标签页，以便用户完成登录或验证码后重试。
    - 当搜索特定网站内容时，会自动使用默认搜索引擎
 
 5. **代理服务配置**：

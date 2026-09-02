@@ -38,8 +38,13 @@
     - startpage
     - sogou
     - hackernews
+    - jd (external browser only)
+    - taobao (external browser only)
+    - alibaba / 1688 (external browser only)
+    - xiaohongshu (external browser only)
+    - zhihu (external browser only)
 - HTTP proxy configuration support for accessing restricted resources
-- No API keys or authentication required
+- No search API keys required; protected external-browser engines use the login state stored in the browser worker profile
 - Returns structured results with titles, URLs, and descriptions
 - Configurable number of results per search
 - Customizable default search engine
@@ -172,7 +177,7 @@ npx cross-env DEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true open-websearch
 |----------|-------------------------|---------|-------------|
 | `ENABLE_CORS` | `false`                 | `true`, `false` | Enable CORS |
 | `CORS_ORIGIN` | `*`                     | Any valid origin | CORS origin configuration |
-| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews` | Default search engine |
+| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews`, `jd`, `taobao`, `alibaba`, `xiaohongshu`, `zhihu` | Default search engine |
 | `USE_PROXY` | `false`                 | `true`, `false` | Enable HTTP proxy |
 | `PROXY_URL` | `http://127.0.0.1:7890` | Any valid URL | Proxy server URL |
 | `FAKE_IP_CIDRS` | empty | Comma-separated CIDR list | Treat DNS answers in these CIDRs as synthetic fake-IP results and do not block them as private-network DNS answers. Literal private/local targets and other private-network DNS answers remain blocked |
@@ -438,7 +443,7 @@ Environment variable configuration:
 |----------|-------------------------|---------|-------------|
 | `ENABLE_CORS` | `false`                 | `true`, `false` | Enable CORS |
 | `CORS_ORIGIN` | `*`                     | Any valid origin | CORS origin configuration |
-| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews` | Default search engine |
+| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `linuxdo`, `juejin`, `startpage`, `sogou`, `hackernews`, `jd`, `taobao`, `alibaba`, `xiaohongshu`, `zhihu` | Default search engine |
 | `USE_PROXY` | `false`                 | `true`, `false` | Enable HTTP proxy |
 | `PROXY_URL` | `http://127.0.0.1:7890` | Any valid URL | Proxy server URL |
 | `FAKE_IP_CIDRS` | empty | Comma-separated CIDR list | Treat DNS answers in these CIDRs as synthetic fake-IP results and do not block them as private-network DNS answers. Literal private/local targets and other private-network DNS answers remain blocked |
@@ -480,8 +485,8 @@ For the local daemon HTTP API (`serve`, `status`, `GET /health`, `POST /search`,
 {
   "query": string,        // Search query
   "limit": number,        // Optional: Number of results to return (default: 10)
-  "engines": string[],    // Optional: Engines to use (bing,baidu,linuxdo,csdn,duckduckgo,exa,brave,juejin,startpage,sogou,hackernews) default runtime-configured engine
-  "searchMode": string    // Optional: request, auto, or playwright (currently only affects Bing)
+  "engines": string[],    // Optional: Engines to use (bing,baidu,linuxdo,csdn,duckduckgo,exa,brave,juejin,startpage,sogou,hackernews,jd,taobao,alibaba,xiaohongshu,zhihu) default runtime-configured engine
+  "searchMode": string    // Optional: request, auto, or playwright (affects Bing; the five protected engines below are external-browser-only)
 }
 ```
 
@@ -707,7 +712,8 @@ Since this tool works by scraping multi-engine search results, please note the f
 
 4. **Search Engine Configuration**:
    - Default search engine can be set via the `DEFAULT_SEARCH_ENGINE` environment variable
-   - Supported engines: bing, duckduckgo, exa, brave, baidu, csdn, linuxdo, juejin, startpage, sogou, hackernews
+   - Supported engines: bing, duckduckgo, exa, brave, baidu, csdn, linuxdo, juejin, startpage, sogou, hackernews, jd, taobao, alibaba (1688), xiaohongshu, zhihu
+   - JD, Taobao, Alibaba/1688, Xiaohongshu, and Zhihu require `BROWSER_BACKEND=external`. Search and `fetchWebContent` for these sites never use direct HTTP or local Chromium. The external worker keeps authenticated per-site search tabs open for login/CAPTCHA handling.
    - The default engine is used when searching specific websites
 
 5. **Proxy Configuration**:

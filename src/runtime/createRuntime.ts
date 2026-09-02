@@ -10,6 +10,11 @@ import { searchJuejin } from '../engines/juejin/index.js';
 import { searchStartpage } from '../engines/startpage/index.js';
 import { searchSogou } from '../engines/sogou/index.js';
 import { searchHackerNews } from '../engines/hackernews/index.js';
+import { searchJd } from '../engines/jd/index.js';
+import { searchTaobao } from '../engines/taobao/index.js';
+import { searchAlibaba } from '../engines/alibaba/index.js';
+import { searchXiaohongshu } from '../engines/xiaohongshu/index.js';
+import { searchZhihu } from '../engines/zhihu/index.js';
 import { fetchLinuxDoArticle } from '../engines/linuxdo/fetchLinuxDoArticle.js';
 import { fetchCsdnArticle } from '../engines/csdn/fetchCsdnArticle.js';
 import { fetchJuejinArticle } from '../engines/juejin/fetchJuejinArticle.js';
@@ -52,7 +57,12 @@ function createDefaultSearchExecutors(): SearchEngineExecutorMap {
         juejin: searchJuejin,
         startpage: searchStartpage,
         sogou: searchSogou,
-        hackernews: searchHackerNews
+        hackernews: searchHackerNews,
+        jd: searchJd,
+        taobao: searchTaobao,
+        alibaba: searchAlibaba,
+        xiaohongshu: searchXiaohongshu,
+        zhihu: searchZhihu
     };
 }
 

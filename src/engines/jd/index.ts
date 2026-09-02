@@ -1,13 +1,11 @@
-import { SearchResult } from '../../types.js';
 import { AppConfig } from '../../config.js';
+import { SearchResult } from '../../types.js';
 import { searchBrowserOnlyEngine } from '../browserOnly/browserOnlySearch.js';
 
-export function searchZhiHu(
+export function searchJd(
     query: string,
     limit: number,
     options?: { searchMode?: AppConfig['searchMode'] }
 ): Promise<SearchResult[]> {
-    return searchBrowserOnlyEngine('zhihu', query, limit, options);
+    return searchBrowserOnlyEngine('jd', query, limit, options);
 }
-
-export const searchZhihu = searchZhiHu;
