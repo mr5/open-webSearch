@@ -22,6 +22,19 @@ function testJdParser(): void {
     assertEqual(results[0].engine, 'jd', 'JD engine');
 }
 
+function testModernJdCardsWithoutAnchors(): void {
+    const results = parseBrowserOnlySearchResults('jd', `
+      <div class="plugin_goodsCardWrapper" data-sku="100321232720">
+        <div class="_goods_title_container_1"><span title="无线机械键盘 K8">无线机械键盘 K8</span></div>
+        <div class="_price_1">¥138</div>
+      </div>
+      <div data-sku="invalid"><span title="不应解析">不应解析</span></div>
+    `, 'https://search.jd.com/Search?keyword=keyboard');
+    assertEqual(results.length, 1, 'Modern JD result count');
+    assertEqual(results[0].title, '无线机械键盘 K8', 'Modern JD title');
+    assertEqual(results[0].url, 'https://item.jd.com/100321232720.html', 'Modern JD URL');
+}
+
 function testTaobaoParserAndDeduplication(): void {
     const results = parseBrowserOnlySearchResults('taobao', `
         <div class="Card--doubleCardWrapper-abc" data-id="2002">
@@ -173,6 +186,7 @@ async function testLocalBrowserIsRejected(): Promise<void> {
 
 async function main(): Promise<void> {
     testJdParser();
+    testModernJdCardsWithoutAnchors();
     testTaobaoParserAndDeduplication();
     testAlibabaParser();
     testModernAlibabaParser();

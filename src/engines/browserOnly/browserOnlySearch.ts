@@ -171,7 +171,8 @@ function analyzeBrowserPage(html: string, finalUrl: string, definition: BrowserO
     $('body script, body style, body noscript, body template').remove();
     const sample = normalizeText(`${title} ${$('body').text()}`).slice(0, 20000).toLowerCase();
     const matchedMarker = BLOCKED_PAGE_MARKERS.find((marker) => sample.includes(marker.toLowerCase()));
-    const hasResultLinks = $(definition.resultLinkSelectors.join(',')).length > 0;
+    const hasResultLinks = $(definition.resultLinkSelectors.join(',')).length > 0
+        || (definition.displayName === 'JD.com' && $('div[data-sku]').length > 0);
     let blockedUrl = false;
     try {
         const parsedFinalUrl = new URL(finalUrl);
@@ -279,6 +280,35 @@ export function parseBrowserOnlySearchResults(
             engine
         });
     });
+
+    // JD's newer search grid renders clickable cards without product anchors.
+    // The data-sku attribute identifies the canonical item URL shown by the UI.
+    if (engine === 'jd') {
+        $('div[data-sku]').each((_, element) => {
+            const card = $(element);
+            const sku = (card.attr('data-sku') || '').trim();
+            if (!/^\d{5,20}$/.test(sku)) return;
+            const url = `https://item.jd.com/${sku}.html`;
+            if (seenUrls.has(url)) return;
+            const title = normalizeText(
+                card.find('[class*="goods_title_container"] [title]').first().attr('title')
+                || card.find('[class*="goods_title_container"]').first().text()
+                || card.find('[title]').first().attr('title')
+                || ''
+            );
+            if (!title) return;
+            const description = normalizeText(card.text());
+            const source = normalizeText(card.find('[class*="shopName"], [class*="storeName"]').first().text()) || 'JD.com';
+            seenUrls.add(url);
+            results.push({
+                title: truncate(title, 240),
+                url,
+                description: truncate(description || title),
+                source: truncate(source, 160),
+                engine
+            });
+        });
+    }
 
     return results;
 }
