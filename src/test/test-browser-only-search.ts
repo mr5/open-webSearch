@@ -142,6 +142,15 @@ function testChallengeDetection(): void {
             && (error as Error & { code?: string }).code === 'interaction_required';
     }
     assert(threw, 'browser-only search should reject verification pages');
+
+    const available = parseBrowserOnlySearchResults('taobao', `
+      <script>captcha</script>
+      <div>亲，访问太频繁，请稍后重试。</div>
+      <div class="Card--doubleCardWrapper" data-id="2002">
+        <a href="https://item.taobao.com/item.htm?id=2002" title="无线键盘"></a>
+      </div>
+    `, 'https://s.taobao.com/search?q=keyboard');
+    assertEqual(available.length, 1, 'usable results behind a warning should still be returned');
 }
 
 async function testLocalBrowserIsRejected(): Promise<void> {

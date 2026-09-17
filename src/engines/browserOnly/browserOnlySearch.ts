@@ -117,6 +117,7 @@ const BLOCKED_PAGE_MARKERS = [
     '滑块验证',
     '安全验证',
     '访问过于频繁',
+    '访问太频繁',
     '操作太频繁',
     '异常访问',
     'verify you are human',
@@ -167,8 +168,10 @@ function analyzeBrowserPage(html: string, finalUrl: string, definition: BrowserO
 } {
     const $ = cheerio.load(html);
     const title = normalizeText($('title').first().text());
+    $('body script, body style, body noscript, body template').remove();
     const sample = normalizeText(`${title} ${$('body').text()}`).slice(0, 20000).toLowerCase();
     const matchedMarker = BLOCKED_PAGE_MARKERS.find((marker) => sample.includes(marker.toLowerCase()));
+    const hasResultLinks = $(definition.resultLinkSelectors.join(',')).length > 0;
     let blockedUrl = false;
     try {
         const parsedFinalUrl = new URL(finalUrl);
@@ -180,7 +183,7 @@ function analyzeBrowserPage(html: string, finalUrl: string, definition: BrowserO
     }
     const empty = definition.emptyResultMarkers.some((marker) => sample.includes(marker.toLowerCase()));
     return {
-        blocked: Boolean(matchedMarker || blockedUrl),
+        blocked: Boolean(blockedUrl || (matchedMarker && !hasResultLinks)),
         empty,
         reason: matchedMarker || (blockedUrl ? `redirected to ${finalUrl}` : '')
     };
