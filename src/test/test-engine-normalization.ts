@@ -17,7 +17,8 @@ const SUPPORTED_ENGINES = [
     'taobao',
     'alibaba',
     'xiaohongshu',
-    'zhihu'
+    'zhihu',
+    'x'
 ] as const;
 
 const engineSchema = z.array(
@@ -57,7 +58,9 @@ const successCases: SuccessCase[] = [
     { input: ['阿里巴巴'], expected: ['alibaba'] },
     { input: ['XHS'], expected: ['xiaohongshu'] },
     { input: ['小红书'], expected: ['xiaohongshu'] },
-    { input: ['知乎'], expected: ['zhihu'] }
+    { input: ['知乎'], expected: ['zhihu'] },
+    { input: ['Twitter'], expected: ['x'] },
+    { input: ['推特'], expected: ['x'] }
 ];
 
 const failureCases: FailureCase[] = [

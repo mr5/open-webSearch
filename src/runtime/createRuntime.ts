@@ -15,6 +15,7 @@ import { searchTaobao } from '../engines/taobao/index.js';
 import { searchAlibaba } from '../engines/alibaba/index.js';
 import { searchXiaohongshu } from '../engines/xiaohongshu/index.js';
 import { searchZhihu } from '../engines/zhihu/index.js';
+import { searchX } from '../engines/x/index.js';
 import { fetchLinuxDoArticle } from '../engines/linuxdo/fetchLinuxDoArticle.js';
 import { fetchCsdnArticle } from '../engines/csdn/fetchCsdnArticle.js';
 import { fetchJuejinArticle } from '../engines/juejin/fetchJuejinArticle.js';
@@ -62,7 +63,8 @@ function createDefaultSearchExecutors(): SearchEngineExecutorMap {
         taobao: searchTaobao,
         alibaba: searchAlibaba,
         xiaohongshu: searchXiaohongshu,
-        zhihu: searchZhihu
+        zhihu: searchZhihu,
+        x: searchX
     };
 }
 

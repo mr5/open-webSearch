@@ -14,7 +14,8 @@ export const SUPPORTED_SEARCH_ENGINES = [
     'taobao',
     'alibaba',
     'xiaohongshu',
-    'zhihu'
+    'zhihu',
+    'x'
 ] as const;
 
 export type SupportedSearchEngine = typeof SUPPORTED_SEARCH_ENGINES[number];
@@ -67,6 +68,10 @@ export function normalizeEngineName(engine: string): string {
         case 'zhihu':
         case '知乎':
             return 'zhihu';
+        case 'x':
+        case 'twitter':
+        case '推特':
+            return 'x';
         default:
             return cleaned;
     }

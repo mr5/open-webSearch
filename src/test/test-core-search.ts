@@ -53,6 +53,7 @@ function testNormalizeEngineName(): void {
     assertEqual(normalizeEngineName('1688'), 'alibaba', 'normalizes Alibaba alias');
     assertEqual(normalizeEngineName('小红书'), 'xiaohongshu', 'normalizes Xiaohongshu alias');
     assertEqual(normalizeEngineName('知乎'), 'zhihu', 'normalizes Zhihu alias');
+    assertEqual(normalizeEngineName('Twitter'), 'x', 'normalizes Twitter alias');
     assertEqualArray([...SUPPORTED_SEARCH_ENGINES], [
         'baidu',
         'bing',
@@ -69,7 +70,8 @@ function testNormalizeEngineName(): void {
         'taobao',
         'alibaba',
         'xiaohongshu',
-        'zhihu'
+        'zhihu',
+        'x'
     ], 'supported engines list');
     console.log('✅ normalizeEngineName and supported engines');
 }

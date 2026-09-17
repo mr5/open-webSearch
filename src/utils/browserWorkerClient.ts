@@ -114,7 +114,7 @@ export async function searchBingWithBrowserWorker(query: string, limit: number):
 }
 
 export async function searchSiteWithBrowserWorker(
-    engine: 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu',
+    engine: 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu' | 'x',
     query: string,
     limit: number
 ): Promise<BrowserWorkerRenderResult> {

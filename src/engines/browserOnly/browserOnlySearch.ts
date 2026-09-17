@@ -4,7 +4,7 @@ import { SearchResult } from '../../types.js';
 import { asBrowserUnavailableError } from '../../utils/playwrightClient.js';
 import { searchSiteWithBrowserWorker } from '../../utils/browserWorkerClient.js';
 
-export type BrowserOnlySearchEngine = 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu';
+export type BrowserOnlySearchEngine = 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu' | 'x';
 
 type BrowserOnlyEngineDefinition = {
     displayName: string;
@@ -97,6 +97,18 @@ const ENGINE_DEFINITIONS: Record<BrowserOnlySearchEngine, BrowserOnlyEngineDefin
         descriptionSelectors: ['.RichContent-inner', '.CopyrightRichText-richText', '.ContentItem-meta'],
         sourceSelectors: ['.AuthorInfo-name', '.UserLink-link', '.ContentItem-status'],
         emptyResultMarkers: ['未找到相关结果', '暂无搜索结果']
+    },
+    x: {
+        displayName: 'X',
+        buildSearchUrl: (query) => `https://x.com/search?q=${encodeURIComponent(query)}&src=typed_query`,
+        resultHosts: ['x.com', 'twitter.com'],
+        resultPath: /\/status\/\d+(?:\/|$)/i,
+        resultLinkSelectors: ['article[data-testid="tweet"] a[href*="/status/"]'],
+        cardSelectors: ['article[data-testid="tweet"]'],
+        titleSelectors: ['[data-testid="tweetText"]'],
+        descriptionSelectors: ['[data-testid="tweetText"]'],
+        sourceSelectors: ['[data-testid="User-Name"]'],
+        emptyResultMarkers: ['No results for', '没有找到结果', '未找到结果']
     }
 };
 
@@ -161,7 +173,8 @@ function analyzeBrowserPage(html: string, finalUrl: string, definition: BrowserO
     try {
         const parsedFinalUrl = new URL(finalUrl);
         blockedUrl = /(?:captcha|verify|punish|sec\.|passport\.|(?:^|\.)login\.)/i.test(parsedFinalUrl.hostname)
-            || /\/(?:captcha|verify|punish|login)(?:[/?#]|$)/i.test(parsedFinalUrl.pathname);
+            || /\/(?:captcha|verify|punish|login)(?:[/?#]|$)/i.test(parsedFinalUrl.pathname)
+            || (definition.displayName === 'X' && /^\/i\/(?:flow\/login|jf\/onboarding\/web)/i.test(parsedFinalUrl.pathname));
     } catch {
         blockedUrl = false;
     }

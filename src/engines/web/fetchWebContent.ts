@@ -59,7 +59,9 @@ const EXTERNAL_BROWSER_ONLY_HOSTS = [
     'alibaba.com',
     'xiaohongshu.com',
     'xhslink.com',
-    'zhihu.com'
+    'zhihu.com',
+    'x.com',
+    'twitter.com'
 ];
 
 export function requiresExternalBrowserForUrl(url: URL | string): boolean {
@@ -400,6 +402,13 @@ function shouldTryBrowserHtmlFallback(contentType: string, raw: string, extracti
 async function fetchHtmlViaBrowser(url: string): Promise<{ contentType: string; finalUrl: string; raw: string; title: string }> {
     const browserPage = await browserHtmlFetcher(url);
     await assertPublicHttpUrlResolved(browserPage.finalUrl, 'Final URL');
+
+    if (/(^|\.)((x|twitter)\.com)$/i.test(new URL(url).hostname)
+        && /^\/i\/(?:flow\/login|jf\/onboarding\/web)/i.test(new URL(browserPage.finalUrl).pathname)) {
+        const error = new Error('X requires login in the external browser. Complete sign-in or verification in the X tab, then retry the fetch.');
+        (error as Error & { code?: string }).code = 'interaction_required';
+        throw error;
+    }
 
     const htmlBytes = Buffer.byteLength(browserPage.html, 'utf8');
     if (htmlBytes > MAX_BROWSER_HTML_BYTES) {

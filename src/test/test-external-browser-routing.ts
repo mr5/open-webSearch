@@ -16,6 +16,9 @@ async function main(): Promise<void> {
     assert(requiresExternalBrowserForUrl('https://detail.1688.com/offer/1.html'), '1688 should require external browser');
     assert(requiresExternalBrowserForUrl('https://www.xiaohongshu.com/explore/1'), 'Xiaohongshu should require external browser');
     assert(requiresExternalBrowserForUrl('https://www.zhihu.com/question/1'), 'Zhihu should require external browser');
+    assert(requiresExternalBrowserForUrl('https://x.com/example/status/123'), 'X should require external browser');
+    assert(requiresExternalBrowserForUrl('https://twitter.com/example/status/123'), 'Twitter should require external browser');
+    assert(!requiresExternalBrowserForUrl('https://notx.com/'), 'lookalike X domain should not require external browser');
     assert(!requiresExternalBrowserForUrl('https://example.com/'), 'unrelated sites should keep normal routing');
 
     const previousBackend = config.browserBackend;
@@ -32,6 +35,13 @@ async function main(): Promise<void> {
             localRejected = (error as { code?: string }).code === 'browser_unavailable';
         }
         assert(localRejected, 'protected fetches should reject local Chromium before any direct request');
+        let xLocalRejected = false;
+        try {
+            await fetchWebContent('https://x.com/example/status/123', 5000, { renderMode: 'request' });
+        } catch (error) {
+            xLocalRejected = (error as { code?: string }).code === 'browser_unavailable';
+        }
+        assert(xLocalRejected, 'X fetch should reject local Chromium before any direct request');
 
         config.browserBackend = 'external';
         config.browserWorkerUrl = 'http://127.0.0.1:8765';
@@ -49,6 +59,18 @@ async function main(): Promise<void> {
         assert(browserCalls === 1, 'protected fetch should force exactly one external browser render');
         assert(result.retrievalMethod === 'browser-html', 'protected fetch should override request mode');
         assert(result.content.includes('Rendered answer content'), 'protected fetch should extract rendered content');
+        __setBrowserHtmlFetcherForTests(async (url) => ({
+            html: '<html><body>Sign in to X</body></html>',
+            finalUrl: 'https://x.com/i/jf/onboarding/web?mode=login',
+            title: 'X'
+        }));
+        let loginRequired = false;
+        try {
+            await fetchWebContent('https://x.com/example/status/123', 5000, { renderMode: 'request' });
+        } catch (error) {
+            loginRequired = (error as { code?: string }).code === 'interaction_required';
+        }
+        assert(loginRequired, 'X fetch login redirect should require user interaction');
     } finally {
         config.browserBackend = previousBackend;
         config.browserWorkerUrl = previousWorkerUrl;

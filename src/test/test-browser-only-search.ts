@@ -105,6 +105,33 @@ function testZhihuParser(): void {
     assertEqual(results[0].engine, 'zhihu', 'Zhihu engine');
 }
 
+function testXParser(): void {
+    const results = parseBrowserOnlySearchResults('x', `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">Example Author @example</div>
+        <div data-testid="tweetText">Browser-only search works</div>
+        <a href="/example/status/1234567890123456789"><time>Today</time></a>
+        <a href="/example/status/1234567890123456789">Duplicate</a>
+      </article>
+    `, 'https://x.com/search?q=browser');
+    assertEqual(results.length, 1, 'X result count');
+    assertEqual(results[0].title, 'Browser-only search works', 'X post text');
+    assertEqual(results[0].source, 'Example Author @example', 'X author');
+    assertEqual(results[0].url, 'https://x.com/example/status/1234567890123456789', 'X post URL');
+    assertEqual(results[0].engine, 'x', 'X engine');
+}
+
+function testXLoginRedirect(): void {
+    let required = false;
+    try {
+        parseBrowserOnlySearchResults('x', '<html><body>Sign in</body></html>',
+            'https://x.com/i/jf/onboarding/web?mode=login');
+    } catch (error) {
+        required = (error as { code?: string }).code === 'interaction_required';
+    }
+    assert(required, 'X login redirect should require user interaction');
+}
+
 function testChallengeDetection(): void {
     let threw = false;
     try {
@@ -142,6 +169,8 @@ async function main(): Promise<void> {
     testModernAlibabaParser();
     testXiaohongshuParser();
     testZhihuParser();
+    testXParser();
+    testXLoginRedirect();
     testChallengeDetection();
     await testLocalBrowserIsRejected();
     console.log('Browser-only marketplace search tests passed.');

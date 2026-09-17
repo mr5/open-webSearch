@@ -8,7 +8,7 @@ import ipaddr from 'ipaddr.js';
 
 export interface AppConfig {
     // Search engine configuration
-    defaultSearchEngine: 'bing' | 'duckduckgo' | 'exa' | 'brave' | 'baidu' | 'csdn' | 'linuxdo' | 'juejin' | 'startpage' | 'sogou' | 'hackernews' | 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu';
+    defaultSearchEngine: 'bing' | 'duckduckgo' | 'exa' | 'brave' | 'baidu' | 'csdn' | 'linuxdo' | 'juejin' | 'startpage' | 'sogou' | 'hackernews' | 'jd' | 'taobao' | 'alibaba' | 'xiaohongshu' | 'zhihu' | 'x';
     // List of allowed search engines (if empty, all engines are available)
     allowedSearchEngines: string[];
     // Search mode: request only, auto request then fallback, or force Playwright
@@ -81,7 +81,7 @@ export const config: AppConfig = {
 };
 
 // Valid search engines list
-const validSearchEngines = ['bing', 'duckduckgo', 'exa', 'brave', 'baidu', 'csdn', 'linuxdo', 'juejin', 'startpage', 'sogou', 'hackernews', 'jd', 'taobao', 'alibaba', 'xiaohongshu', 'zhihu'];
+const validSearchEngines = ['bing', 'duckduckgo', 'exa', 'brave', 'baidu', 'csdn', 'linuxdo', 'juejin', 'startpage', 'sogou', 'hackernews', 'jd', 'taobao', 'alibaba', 'xiaohongshu', 'zhihu', 'x'];
 const validSearchModes = ['request', 'auto', 'playwright'];
 const validPlaywrightPackages = ['auto', 'playwright', 'playwright-core'];
 const validBrowserBackends = ['chromium', 'external'];
@@ -194,7 +194,7 @@ if (!quietStartupLogs) {
     }
     const effectiveModeForLog = getEffectiveSearchMode(config);
     const effectiveModeSuffix = effectiveModeForLog !== config.searchMode ? `, effective: ${effectiveModeForLog.toUpperCase()}` : '';
-    console.error(`🔍 Search mode: ${config.searchMode.toUpperCase()}${effectiveModeSuffix} (affects Bing; JD, Taobao, Alibaba/1688, Xiaohongshu, and Zhihu require the external browser worker)`);
+    console.error(`🔍 Search mode: ${config.searchMode.toUpperCase()}${effectiveModeSuffix} (affects Bing; JD, Taobao, Alibaba/1688, Xiaohongshu, Zhihu, and X require the external browser worker)`);
     if (config.searchMode === 'playwright') {
         const availability = checkPlaywrightModeConfiguration(config);
         if (!availability.available) {
