@@ -45,12 +45,12 @@ function formatWorkerError(status: number, raw: string): string {
     return raw.slice(0, 1000) || `HTTP ${status}`;
 }
 
-async function requestWorker<T>(pathname: string, body?: unknown): Promise<T> {
+async function requestWorker<T>(pathname: string, body?: unknown, requestTimeoutMs?: number): Promise<T> {
     if (!config.browserWorkerToken) {
         throw new Error('External browser backend is selected but BROWSER_WORKER_TOKEN is not configured');
     }
     const controller = new AbortController();
-    const timeoutMs = Math.max(config.playwrightNavigationTimeoutMs + 15000, 30000);
+    const timeoutMs = requestTimeoutMs ?? Math.max(config.playwrightNavigationTimeoutMs + 15000, 30000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
         const headers: Record<string, string> = {
@@ -102,11 +102,12 @@ export async function renderPageWithBrowserWorker(url: string): Promise<BrowserW
 }
 
 export async function searchBingWithBrowserWorker(query: string, limit: number): Promise<BrowserWorkerPage[]> {
+    const pageCount = Math.min(5, Math.max(1, Math.ceil(limit / 10)));
     const result = await requestWorker<{ pages: BrowserWorkerPage[] }>('bing-search', {
         query,
         limit,
         timeout_ms: Math.max(config.playwrightNavigationTimeoutMs, 15000)
-    });
+    }, Math.max(120000, config.playwrightNavigationTimeoutMs * (pageCount + 2) + 30000));
     if (!Array.isArray(result.pages)) {
         throw new Error('Browser worker returned an invalid Bing response');
     }
@@ -123,7 +124,7 @@ export async function searchSiteWithBrowserWorker(
         query,
         limit,
         timeout_ms: Math.max(config.playwrightNavigationTimeoutMs, 15000)
-    });
+    }, Math.max(120000, config.playwrightNavigationTimeoutMs * 3 + 30000));
     if (!result.page || typeof result.page.html !== 'string' || typeof result.page.finalUrl !== 'string') {
         throw new Error('Browser worker returned an invalid site-search response');
     }
