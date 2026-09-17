@@ -73,7 +73,7 @@ const ENGINE_DEFINITIONS: Record<BrowserOnlySearchEngine, BrowserOnlyEngineDefin
     },
     xiaohongshu: {
         displayName: 'Xiaohongshu',
-        buildSearchUrl: (query) => `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(query)}&source=web_search_result_notes`,
+        buildSearchUrl: (query) => `https://www.xiaohongshu.com/search_result_all?keyword=${encodeURIComponent(query)}&source=web_explore_feed`,
         resultHosts: ['xiaohongshu.com'],
         resultPath: /\/explore\//i,
         resultLinkSelectors: ['a[href*="/explore/"]'],
@@ -236,19 +236,22 @@ export function parseBrowserOnlySearchResults(
         let modernAlibabaDescription = '';
         let modernAlibabaSource = '';
         if (engine === 'alibaba' && parsedUrl.hostname === 'detail.m.1688.com') {
-            // Current 1688 search pages render each offer as an empty marker link followed
-            // by sibling rows. Nested image links repeat the URL and must not become cards.
-            if (!link.hasClass('search-offer-wrapper') || !link.parent().hasClass('feeds-wrapper')) {
+            // The offer marker is followed by sibling rows. Nested image/shop
+            // links repeat the URL and must not become separate result cards.
+            const oldGrid = link.hasClass('search-offer-wrapper') && link.parent().hasClass('feeds-wrapper');
+            const newGrid = (link.attr('class') || '').includes('offerCard--')
+                && (link.parent().attr('class') || '').includes('gridCell--');
+            if (!oldGrid && !newGrid) {
                 return;
             }
-            const offerRows = link.nextUntil('a.search-offer-wrapper');
-            modernAlibabaTitle = normalizeText(offerRows.filter('.offer-title-row').first().text());
+            const offerRows = oldGrid ? link.nextUntil('a.search-offer-wrapper') : link.nextAll();
+            modernAlibabaTitle = normalizeText(offerRows.filter('.offer-title-row, [class*="titleRow"]').first().text());
             modernAlibabaDescription = normalizeText([
-                offerRows.filter('.offer-desc-row').first().text(),
-                offerRows.filter('.offer-price-row').first().text(),
-                offerRows.filter('.offer-tag-row').first().text()
+                offerRows.filter('.offer-desc-row, [class*="descRow"]').first().text(),
+                offerRows.filter('.offer-price-row, [class*="priceRow"]').first().text(),
+                offerRows.filter('.offer-tag-row, [class*="tagRow"]').first().text()
             ].filter(Boolean).join(' '));
-            modernAlibabaSource = normalizeText(offerRows.filter('.offer-shop-row').first().text());
+            modernAlibabaSource = normalizeText(offerRows.filter('.offer-shop-row, [class*="shopRow"]').first().text());
         }
 
         const card = link.closest(cardSelector);
@@ -339,7 +342,7 @@ export async function searchBrowserOnlyEngine(
     const page = await searchSiteWithBrowserWorker(engine, query, limit);
     const pageState = analyzeBrowserPage(page.html, page.finalUrl, definition);
     if (page.interactionRequired || pageState.blocked) {
-        throw interactionRequiredError(definition, pageState.reason || 'the external browser reported that login or verification is required');
+        throw interactionRequiredError(definition, page.interactionReason || pageState.reason || 'the external browser reported that login or verification is required');
     }
     const results = parseBrowserOnlySearchResults(engine, page.html, page.finalUrl).slice(0, limit);
     if (results.length === 0 && !pageState.empty) {

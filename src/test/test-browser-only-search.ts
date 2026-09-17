@@ -89,6 +89,24 @@ function testModernAlibabaParser(): void {
     assertEqual(results[0].engine, 'alibaba', 'Modern Alibaba engine');
 }
 
+function testCurrentAlibabaGridParser(): void {
+    const results = parseBrowserOnlySearchResults('alibaba', `
+      <div class="gridCell--PjMmdJiZ">
+        <a class="offerCard--dMshu5T4" href="http://detail.m.1688.com/page/index.html?offerId=628196518518"></a>
+        <div class="offerImgWrapper--PPeb9zrY">
+          <a class="offerCard--dMshu5T4" href="http://detail.m.1688.com/page/index.html?offerId=628196518518">找相似</a>
+        </div>
+        <div class="titleRow--yU3JSAPp">无线机械键盘三模</div>
+        <div class="descRow--PMvbLUp6">蓝牙热插拔</div>
+        <div class="priceRow--NNjRRNPe">¥99.00</div>
+        <div class="shopRow--ABCD">键盘工厂</div>
+      </div>
+    `, 'https://s.1688.com/selloffer/offer_search.htm?keywords=keyboard');
+    assertEqual(results.length, 1, 'Current Alibaba grid result count');
+    assertEqual(results[0].title, '无线机械键盘三模', 'Current Alibaba grid title');
+    assertEqual(results[0].source, '键盘工厂', 'Current Alibaba grid shop');
+}
+
 function testXiaohongshuParser(): void {
     const results = parseBrowserOnlySearchResults('xiaohongshu', `
         <section class="note-item">
@@ -96,7 +114,7 @@ function testXiaohongshuParser(): void {
           <div class="title"><span>上海周末徒步路线</span></div>
           <div class="footer"><span class="name">山野日记</span></div>
         </section>
-    `, 'https://www.xiaohongshu.com/search_result?keyword=hiking');
+    `, 'https://www.xiaohongshu.com/search_result_all?keyword=hiking');
     assertEqual(results.length, 1, 'Xiaohongshu result count');
     assertEqual(results[0].title, '上海周末徒步路线', 'Xiaohongshu title');
     assertEqual(results[0].url, 'https://www.xiaohongshu.com/explore/abc123', 'Xiaohongshu URL');
@@ -190,6 +208,7 @@ async function main(): Promise<void> {
     testTaobaoParserAndDeduplication();
     testAlibabaParser();
     testModernAlibabaParser();
+    testCurrentAlibabaGridParser();
     testXiaohongshuParser();
     testZhihuParser();
     testXParser();

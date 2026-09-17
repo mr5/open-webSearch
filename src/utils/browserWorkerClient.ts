@@ -9,6 +9,7 @@ export type BrowserWorkerRenderResult = {
     cookieHeader?: string;
     dialogTexts?: string[];
     interactionRequired?: boolean;
+    interactionReason?: string;
 };
 
 export type BrowserWorkerPage = {
